@@ -16,7 +16,7 @@ def sleep_vs_sugar(df: pd.DataFrame):
     corr = df["sleep_hours"].corr(df["sugar_grams"])
     
     if corr < -0.4:
-        insight = "Shorter sleep is strongly associated with higher sugar intake."
+        insight = "Less sleep is strongly associated with higher sugar intake."
     elif corr < -0.2:
         insight = "Less sleep tends to be associated with increased sugar consumption."
     else:

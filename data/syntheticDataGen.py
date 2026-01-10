@@ -25,7 +25,7 @@ for i in range(days):
         sugar_grams = np.random.randint(20, 60)
         
     data.append({
-        "data": date.strftime("%Y-%m-%d"),
+        "date": date.strftime("%Y-%m-%d"),
         "sleep_hours": round(sleep, 1),
         "resting_heart_rate": round(resting_hr, 1),
         "steps": steps,
