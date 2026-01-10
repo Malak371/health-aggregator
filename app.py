@@ -1,6 +1,6 @@
 import streamlit as st 
 import pandas as pd 
-from analysis import correlations, anomalies
+from analysis import correlations, anomalies, recommendations
 
 st.set_page_config(
     page_title="Personal Health and Wellness Aggregator",
@@ -85,3 +85,26 @@ if not high_hr_days.empty:
 if low_sleep_days.empty and high_hr_days.empty:
     st.success("No significant anomalies detected during this period.")
     
+
+correlations_data = {
+    "sleep_sugar_corr": corr2
+}
+
+anomalies_data = {
+    "high_hr": high_hr_days
+}
+
+recs = recommendations.generate_recommendations(
+    df,
+    correlations_data,
+    anomalies_data
+)
+
+st.header("✅ Personalized Next Steps")
+
+for rec in recs:
+    st.write(f"- {rec}")
+    
+st.caption(
+    "Insights are based on observed data patterns and are not medical advice."
+)
