@@ -3,7 +3,7 @@
 A prototype that unifies sleep, activity, nutrition, mood, and heart rate data
 to surface explainable, actionable wellness insights.
 
-### 2. Features
+### Features
 
 - Unified health dashboard
 
@@ -13,7 +13,7 @@ to surface explainable, actionable wellness insights.
 
 - Actionable next-step recommendations
 
-### 3. Tech Stack
+### Tech Stack
 
 - Python
 
@@ -21,16 +21,16 @@ to surface explainable, actionable wellness insights.
 
 - Streamlit
 
-### 4. How to Run Locally
+### How to Run Locally
 
 1. Clone the repository
 2. Install dependencies:
-   pip install -r requirements.txt
+   `pip install -r requirements.txt`
 3. Run the app:
-   streamlit run ./app.py
+   `streamlit run ./app.py`
 
-### 5. Demo Video
+### Demo Video
 
-### 6. Design Documentation
+### Design Documentation
 
 See `DOCUMENTATION.md` for system design, AI approach, and future enhancements.
