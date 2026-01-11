@@ -31,6 +31,8 @@ to surface explainable, actionable wellness insights.
 
 ### Demo Video
 
+[Youtube Demo Video]https://youtu.be/dTq7Soxa-Gs
+
 ### Design Documentation
 
 See `DOCUMENTATION.md` for system design, AI approach, and future enhancements.
