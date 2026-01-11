@@ -27,8 +27,10 @@ to surface explainable, actionable wellness insights.
 2. Install dependencies:
    pip install -r requirements.txt
 3. Run the app:
-   streamlit run app.py
+   streamlit run ./app.py
 
 ### 5. Demo Video
 
 ### 6. Design Documentation
+
+See `DOCUMENTATION.md` for system design, AI approach, and future enhancements.
