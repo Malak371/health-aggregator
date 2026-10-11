@@ -1,109 +1,258 @@
-# Personal Health & Wellness Aggregator ❤️‍🩹
+# Health & Performance Aggregator: Design Documentation
 
-## Design Documentation
+> **Not medical advice.** This is a software portfolio project. Its scores, alerts and predictions describe patterns in the data it is given. They are not validated clinically and must not be used to diagnose, treat or prevent any condition. If you are worried about your health, talk to a qualified professional.
 
-### 1. Problem Overview
+## 1. Problem
 
-Health-conscious individuals often use multiple disconnected tools to track their wellness, such as wearables for sleep and activity, apps for nutrition, and manual logs for mood. Because this data is fragmented, it becomes difficult to understand how these signals interact and how daily habits influence overall well-being.
+People who track their health and performance end up with fragmented data: a wearable for sleep and heart rate, an app for workouts, notes for mood and study time. Each tool shows its own numbers, so the interactions that matter most (does a heavy study week cost me sleep? is my training ramping up faster than I recover?) stay invisible.
 
-This project addresses that problem by unifying multiple health signals into a single platform and transforming raw data into explainable, actionable insights.
+This project puts those signals in one place and turns them into insights that can each be traced back to the data that produced them.
 
-### 2. Solution Overview
+## 2. System design
 
-The Personal Health & Wellness Aggregator is a lightweight, AI-enabled prototype that:
+```mermaid
+flowchart TB
+    subgraph client [Browser]
+        visitor([Visitor])
+    end
 
-- Unifies sleep, activity, nutrition, mood, and heart rate data
+    subgraph streamlit [Streamlit Community Cloud]
+        dashboard[frontend/app.py<br/>charts.py · api_client.py]
+    end
 
-- Discovers correlations between health behaviors
+    subgraph render [Render web service · Docker]
+        routes[api/routes.py]
+        services[services/<br/>datasets · insights]
+        ingestion[ingestion/<br/>csv_daily · apple_health]
+        analytics[analytics/<br/>load · recovery · burnout<br/>correlations · anomalies · recommendations]
+        ml[ml/<br/>features · model]
+        routes --> services
+        routes --> ingestion
+        services --> analytics
+        services --> ml
+        ml --> analytics
+    end
 
-- Detects anomalies relative to a user’s personal baseline
+    subgraph neon [Neon]
+        pg[(PostgreSQL)]
+    end
 
-- Translates insights into low-risk, actionable next steps
+    visitor --> dashboard
+    dashboard -- REST / JSON --> routes
+    services --> pg
+```
 
-The system emphasizes explainability, personalization, and responsible AI practices rather than black-box predictions.
+Design decisions:
 
-### 3. Architecture & Design
+- **The dashboard has no logic.** It calls the API and draws what comes back. Every number can therefore be tested without a browser, and another client could reuse the API.
+- **Analytics are pure functions of a DataFrame.** `analytics/` and `ml/` know nothing about HTTP or the database, which keeps them easy to test with hand-made frames.
+- **Datasets instead of accounts.** There is no login. The bundled demo data lives in a read-only dataset called `demo`. Each visitor who uploads a file gets their own dataset, addressed by a random 128-bit slug that only their browser session knows. The API never lists datasets, uploaded datasets are deleted after `UPLOAD_TTL_HOURS` (24 by default), and their number is capped.
+- **Models are trained on request.** The model is a logistic regression on at most a few hundred rows and trains in about 0.1 s, so there are no model files to version or deploy and the result always matches the data.
+- **One error shape.** Every 4xx response is `{"detail": {"message": "...", "errors": ["..."]}}`, so clients can show a headline and the specifics.
 
-#### Data Layer
+### Request flow for an upload
 
-- Synthetic health data generated via Python to preserve privacy
+1. The dashboard creates a dataset (`POST /api/v1/datasets`) and keeps the slug in the Streamlit session.
+2. It posts the file to `/import/csv` or `/import/apple-health`. The file is size-limited and parsed.
+3. Every day is validated with Pydantic. A CSV with any invalid row is rejected as a whole with line-numbered messages.
+4. Valid days are merged into the dataset: new dates are inserted, existing dates keep the values the new file does not carry.
+5. The dashboard re-fetches metrics, insights and the prediction for that slug.
 
-- Metrics include:
+## 3. Data model
 
-  - Sleep duration
+```mermaid
+erDiagram
+    DATASETS ||--o{ DAILY_METRICS : contains
+    DATASETS {
+        int id PK
+        string slug UK "demo, or a random token"
+        string name
+        string source "synthetic | upload"
+        datetime created_at
+    }
+    DAILY_METRICS {
+        int id PK
+        int dataset_id FK
+        date date "unique per dataset"
+        float sleep_hours "0-24"
+        float resting_heart_rate "25-220 bpm"
+        int steps "0-200000"
+        float mood_score "1-5"
+        float sugar_grams "0-1000"
+        float training_minutes "0-1440"
+        float training_rpe "1-10, perceived exertion"
+        float study_hours "0-24"
+    }
+```
 
-  - Daily steps
+Every metric is nullable, because sources differ: Apple Health has no mood or study time, and a hand-kept CSV may have no heart rate. Each analysis uses whatever is present and says so when it cannot run.
 
-  - Resting heart rate
+The schema is managed with Alembic (`backend/alembic/`). `DATABASE_URL` selects the database: SQLite by default, PostgreSQL in production. A test checks that the migrations produce the same tables as the models, and CI runs the suite against both databases.
 
-  - Mood score
+## 4. API
 
-  - Sugar intake (nutrition proxy)
+Interactive documentation is served at `/docs`. All dataset routes are under `/api/v1/datasets/{slug}`.
 
-#### Analysis Layer
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Liveness and database check |
+| POST | `/api/v1/datasets` | Create an empty dataset for uploads |
+| GET | `/api/v1/datasets/{slug}` | Name, source, number of days, date range |
+| DELETE | `/api/v1/datasets/{slug}` | Delete an uploaded dataset |
+| POST | `/api/v1/datasets/{slug}/import/csv` | Import a daily-metrics CSV |
+| POST | `/api/v1/datasets/{slug}/import/apple-health` | Import an Apple Health `export.xml` |
+| POST | `/api/v1/datasets/{slug}/records` | Add or update days as JSON |
+| GET | `/api/v1/datasets/{slug}/metrics` | Raw daily records, optional `start` / `end` |
+| GET | `/api/v1/datasets/{slug}/metrics/derived` | Per-day load, ACWR, readiness, burnout risk |
+| GET | `/api/v1/datasets/{slug}/insights` | Correlations, anomalies, load, recovery, burnout, recommendations |
+| GET | `/api/v1/datasets/{slug}/prediction` | Next-day prediction, evaluation and explanation |
 
-- `correlations.py`: Identifies relationships between sleep and other health signals using statistical correlation
+### Supported import formats
 
-- `anomalies.py`: Detects deviations from personal baselines using rolling averages and standard deviation
+**Daily-metrics CSV.** One row per day, a `date` column (ISO format) and any of the metric columns from the data model. Example: `data/samples/demo_daily_metrics.csv`.
 
-- `recommendations.py`: Converts insights and anomalies into non-prescriptive lifestyle suggestions
+**Apple Health export.** The `export.xml` file inside the `export.zip` that the Health app produces. The parser streams the file with `defusedxml` and aggregates per day:
 
-#### Presentation Layer
+| Daily value | Apple Health source | Rule |
+| --- | --- | --- |
+| `steps` | `HKQuantityTypeIdentifierStepCount` | Sum per device, then take the largest device, because a phone and a watch both count the same steps |
+| `sleep_hours` | `HKCategoryTypeIdentifierSleepAnalysis` | Time in "asleep" stages only (not "in bed" or "awake"), assigned to the wake-up day, largest device |
+| `resting_heart_rate` | `HKQuantityTypeIdentifierRestingHeartRate` | Mean of the day's readings |
+| `sugar_grams` | `HKQuantityTypeIdentifierDietarySugar` | Sum |
+| `training_minutes` | `Workout` elements | Sum of durations |
 
-- Streamlit-based UI providing:
+`data/samples/apple_health_export_sample.xml` is a synthetic file written in this format by `backend/scripts/generate_apple_health_sample.py`. Limitations: uploads are capped at `MAX_UPLOAD_MB` (20 MB by default), and multi-year exports are often larger than that; the parser has been tested against the format as documented and against the synthetic sample, not against a wide range of real devices.
 
-  - Unified health dashboard
+## 5. Analytics
 
-  - AI-powered insights
+All rolling windows run over calendar days; days missing from the data are treated as gaps, not skipped.
 
-  - Proactive alerts
+### Training and cognitive load (`analytics/load.py`)
 
-  - Personalized next steps
+- **Daily training load** = training minutes x RPE (the session-RPE method). A day with no workout counts as 0. If a workout has no RPE, as with Apple Health, a moderate 5 is assumed.
+- **Acute load** = mean of the last 7 days. **Chronic load** = mean of the last 28 days (reported once 21 days exist).
+- **ACWR** = acute / chronic. Zones: under 0.8 undertraining, 0.8-1.3 optimal, 1.3-1.5 caution, over 1.5 high.
+- **Study load** uses the same windows on study hours.
 
-### 4. AI / ML Approach
+The zone thresholds come from the sports-science literature on workload ratios (Gabbett, 2016). That literature is contested, and the thresholds are used here as a readable heuristic, not as injury prediction.
 
-Rather than complex machine learning models, this prototype uses explainable analytical techniques:
+### Readiness and recovery (`analytics/recovery.py`)
 
-- Pearson correlation for relationship discovery
+Readiness is a 0-100 weighted average of three components, re-weighted over whichever are available:
 
-- Rolling-window statistics for personalized baselines
+| Component | Weight | Scaling |
+| --- | --- | --- |
+| Sleep | 0.4 | 4 h or less = 0, 8 h or more = 1 |
+| Resting heart rate | 0.3 | At the personal 28-day baseline = 0.5; 5 bpm above = 0; 5 bpm below = 1 |
+| Mood | 0.3 | 1 = 0, 5 = 1 |
 
-- Rule-based logic for recommendations
+The **recovery trend** compares mean readiness over the last 7 days with the 7 days before: more than 3 points up is "improving", more than 3 down is "declining".
 
-This approach ensures transparency, interpretability, and user trust—especially important for sensitive health data.
+### Burnout risk (`analytics/burnout.py`)
 
-### 5. Tech Stack
+A 0-100 weighted average of five strain components, each scaled to 0-1 and averaged over 7 days:
 
-- **Language**: Python
+| Component | Weight | 0 means | 1 means |
+| --- | --- | --- | --- |
+| Sleep debt | 0.25 | 8 h every night | 2 h short every night |
+| Training strain | 0.25 | ACWR at or under 1.0 | ACWR 1.8 or more |
+| Low mood | 0.20 | Weekly mood 3.5 or more | Weekly mood 1 |
+| Cognitive strain | 0.15 | 4 study hours a day or fewer | 9 a day |
+| Elevated heart rate | 0.15 | At or below baseline | 6 bpm above baseline |
 
-- **Data Processing**: pandas, numpy
+At least two components must be available. Levels: under 33 low, 33-66 moderate, above 66 high. The weights and cut-offs are judgement calls chosen to be easy to explain; they have not been validated against any burnout instrument.
 
-- **Visualization & UI**: Streamlit
+### Correlations (`analytics/correlations.py`)
 
-- **Analytics**: Statistical correlation, rolling-window anomaly detection
+Pearson correlation for a fixed list of pairs, optionally lagged (for example training load against the next day's resting heart rate). A pair needs at least 14 overlapping days. Each result carries `r`, the p-value, the sample size and a strength label (under 0.2 negligible, 0.4 weak, 0.6 moderate, otherwise strong). The wording is always "tends to go with": correlation does not show causation, and several pairs tested at once will sometimes look related by chance.
 
-- **Environment**: Local development in Visual Studio Code
+### Anomalies (`analytics/anomalies.py`)
 
-### 6. Responsible AI Considerations
+- **Poor sleep:** under 5 hours.
+- **High resting heart rate:** more than 1.5 standard deviations and at least 3 bpm above the mean of the previous 7 days. The day being tested is excluded from its own baseline.
+- **Training-load spike:** the first day of each stretch with ACWR above 1.5.
 
-- Uses correlation, not causation
+### Recommendations (`analytics/recommendations.py`)
 
-- Avoids medical diagnoses or prescriptive advice
+Plain rules over the latest values. Each recommendation is returned with the observation that triggered it, for example "7-day average sleep is 5.8 h".
 
-- Employs user-specific baselines instead of global thresholds
+## 6. Machine learning
 
-- Uses synthetic data to protect privacy
+### Task
 
-- Includes clear disclaimers in the UI
+Predict, at the end of day *t*, whether day *t + 1* will be a **low-readiness day**: readiness below the 33rd percentile of the person's own readiness in the training period. The label is personal, so "low" means low for you.
 
-### 7. Future Enhancements
+### Features
 
-- Integration with real health APIs (Apple HealthKit, Google Fit, MyFitnessPal)
+Ten features, all computed from day *t* or earlier (a test tampers with later days and checks the features do not change):
 
-- Longer-term trend modeling and seasonality detection
+today's readiness, 3-day average sleep, 7-day average sleep shortfall against 8 h, resting heart-rate deviation from baseline, 3-day average mood, today's training load, 7-day training load, ACWR, today's study hours, 7-day study hours.
 
-- User-configurable alert thresholds
+Features that a dataset never records are dropped; occasional gaps are filled with the training median.
 
-- Expanded nutrition metrics (macros, meal timing)
+### Model
 
-- Secure authentication and encrypted data storage
+Standardised, L2-regularised logistic regression (scikit-learn), with balanced class weights. The regularisation strength is chosen by expanding-window cross-validation inside the training period.
+
+Why this model: there are at most a few hundred rows, so a linear model is about as much as the data can support, and its coefficients are directly interpretable. The dashboard shows them twice: globally (log-odds per standard deviation of each feature) and for the latest prediction (coefficient x standardised value, the push each feature gives).
+
+### Evaluation
+
+- **Split by time.** The first 21 days are skipped as warm-up for the rolling features. Of the remaining labelled days, the first 75% are for training and the most recent 25% for testing. Nothing is shuffled, and the low-readiness cut-off is computed from the training period only.
+- **Metric.** ROC-AUC, with accuracy, precision and recall at a 0.5 threshold.
+- **Baselines.** Always predicting the majority class, and persistence: ranking days by today's readiness alone ("tomorrow will be like today").
+- After evaluation the model is refitted on all labelled days to make the prediction for tomorrow.
+
+Results on the bundled synthetic dataset (118 training days, 40 test days):
+
+| | ROC-AUC | Accuracy |
+| --- | --- | --- |
+| Logistic regression | 0.79 | 72% |
+| Persistence baseline | 0.82 | n/a |
+| Majority-class baseline | n/a | 60% |
+
+Expanding-window cross-validation over the whole dataset (`backend/scripts/compare_models.py`, mean of four folds):
+
+| Model | Mean ROC-AUC |
+| --- | --- |
+| Logistic regression | 0.80 |
+| Persistence baseline | 0.78 |
+| Gradient boosting (depth 2, 100 trees) | 0.71 |
+
+### What these results mean
+
+- The model is clearly better than chance and than the majority baseline, but it is **not reliably better than persistence**. It loses on the hold-out and wins narrowly in cross-validation; with 40 test days neither difference is meaningful. Readiness is strongly autocorrelated, so "like today" is a hard baseline to beat.
+- Gradient boosting does worse: there is too little data for it.
+- The value of the model in this project is the explanation (which signals are associated with a bad day tomorrow), not extra accuracy.
+
+### Limitations
+
+- **Synthetic data.** The demo dataset is generated by `backend/scripts/generate_synthetic_data.py`, where a hidden fatigue state drives the signals. Good scores on it show that the pipeline works, not that the model would work for a real person.
+- **Small samples.** A test set of 40 days gives wide uncertainty. No confidence intervals are reported.
+- **The label is derived from the inputs.** Readiness is itself computed from sleep, heart rate and mood, so the model predicts tomorrow's value of a formula, not an independently measured outcome such as illness or performance.
+- **Per-dataset training.** An uploaded dataset gets its own model only if it has at least 81 days and enough low-readiness days in its most recent quarter. Otherwise the API returns `available: false` with the reason.
+- **Associations only.** Coefficients describe association in one person's data, not causes, and correlated features share credit arbitrarily.
+- **Not validated clinically.** See the note at the top of this document.
+
+## 7. Privacy and security
+
+- No accounts and no personal identifiers are stored; a dataset is a set of daily numbers under a random key.
+- Uploads expire automatically and can be deleted from the dashboard at any time.
+- XML is parsed with `defusedxml`, which refuses entity-expansion attacks; uploads are size-limited.
+- Secrets (the production database URL) are set in the hosting dashboards. `.env` files are git-ignored and `.env.example` documents the variables.
+- Known gap: there is no rate limiting beyond the cap on the number of uploaded datasets.
+
+## 8. Deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: the API runs as a Docker web service on Render's free tier, the database is Neon's free PostgreSQL, and the dashboard runs on Streamlit Community Cloud with `BACKEND_URL` set as a secret. The demo dataset is re-seeded from the repository on every API start, so a new visitor always sees data.
+
+## 9. Testing
+
+`pytest` runs 103 tests:
+
+- **Analytics:** hand-built frames with known answers for load, ACWR, readiness, burnout, correlations and each anomaly rule.
+- **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML.
+- **API:** every endpoint, error shapes, the read-only demo, expiry and capacity limits, on SQLite and PostgreSQL.
+- **ML:** no look-ahead in the features, the chronological split, determinism, and refusal on short or flat data.
+- **Migrations:** upgrade and downgrade, compared with the models.
+- **Dashboard:** the real Streamlit script run against the real API in-process.
