@@ -1,9 +1,13 @@
 """Runtime configuration, read from environment variables (or a local .env)."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEMO_CSV = REPO_ROOT / "data" / "samples" / "demo_daily_metrics.csv"
 
 
 class Settings(BaseSettings):
@@ -14,6 +18,8 @@ class Settings(BaseSettings):
     seed_demo_data: bool = True
     max_upload_mb: int = 20
     upload_ttl_hours: int = 24
+    # Upper bound on visitor datasets kept at once, to protect a small free database.
+    max_upload_datasets: int = 200
 
     @field_validator("database_url")
     @classmethod

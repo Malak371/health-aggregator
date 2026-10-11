@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
+from typing import cast
 
 import pandas as pd
 
@@ -28,7 +29,7 @@ def detect_poor_sleep(frame: pd.DataFrame, threshold: float = POOR_SLEEP_HOURS) 
     low = frame["sleep_hours"][frame["sleep_hours"] < threshold]
     return [
         Anomaly(
-            date=day.date(),
+            date=cast(pd.Timestamp, day).date(),
             kind="poor_sleep",
             value=float(hours),
             baseline=threshold,
