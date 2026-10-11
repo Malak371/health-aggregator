@@ -1,0 +1,32 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["backend/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies and uploads as argument defaults by design.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "backend"
+packages = ["app"]
+plugins = ["pydantic.mypy"]
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy.*"]
+ignore_missing_imports = true
