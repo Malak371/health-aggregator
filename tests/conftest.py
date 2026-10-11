@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.config import Settings
 from app.db import Base, make_engine
 from app.main import create_app
 
@@ -22,12 +24,19 @@ def demo_frame() -> pd.DataFrame:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    """An API client backed by a fresh SQLite database seeded with the demo data."""
-    engine = make_engine(f"sqlite:///{tmp_path / 'test.db'}")
+    """An API client on a clean database seeded with the demo data.
+
+    Uses a temporary SQLite file unless TEST_DATABASE_URL points elsewhere
+    (CI also runs the suite against PostgreSQL).
+    """
+    url = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{tmp_path / 'test.db'}"
+    engine = make_engine(Settings(database_url=url).database_url)
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     app = create_app(sessionmaker(bind=engine, expire_on_commit=False))
     with TestClient(app) as test_client:
         yield test_client
+    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
