@@ -1,6 +1,6 @@
 """Write a small synthetic file in Apple Health's export.xml format.
 
-It replays the first 90 days of the synthetic demo dataset as <Record> and
+It replays the first 150 days of the synthetic demo dataset as <Record> and
 <Workout> elements, including the quirks a real export has (a DTD header, the
 same steps counted by both a phone and a watch, sleep split into stages, time
 in bed that is not sleep). No real person's data is involved.
@@ -22,7 +22,7 @@ import pandas as pd
 SAMPLES = Path(__file__).resolve().parents[2] / "data" / "samples"
 SOURCE_CSV = SAMPLES / "demo_daily_metrics.csv"
 OUTPUT = SAMPLES / "apple_health_export_sample.xml"
-DAYS = 90
+DAYS = 150
 TZ = dt.timezone(dt.timedelta(hours=-5))
 
 HEADER = """<?xml version="1.0" encoding="UTF-8"?>

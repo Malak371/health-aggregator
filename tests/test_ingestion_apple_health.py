@@ -27,7 +27,7 @@ ASLEEP = "HKCategoryValueSleepAnalysisAsleepCore"
 def test_parses_the_bundled_sample() -> None:
     result = parse_apple_health(APPLE_HEALTH_XML.read_bytes())
 
-    assert len(result.records) == 90
+    assert len(result.records) == 150
     first = result.records[0]
     assert first.date == dt.date(2026, 4, 1)
     assert first.sleep_hours == pytest.approx(5.9, abs=0.05)
