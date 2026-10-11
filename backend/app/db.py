@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 
+from fastapi import Request
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -25,6 +26,7 @@ engine = make_engine(get_settings().database_url)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
-def get_session() -> Iterator[Session]:
-    with SessionLocal() as session:
+def get_session(request: Request) -> Iterator[Session]:
+    """FastAPI dependency: one session per request, from the app's own factory."""
+    with request.app.state.session_factory() as session:
         yield session
