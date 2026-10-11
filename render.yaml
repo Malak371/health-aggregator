@@ -1,0 +1,18 @@
+# Render Blueprint for the API. Secrets are entered in the Render dashboard
+# (sync: false), never committed here.
+services:
+  - type: web
+    name: health-aggregator-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # Neon connection string
+        sync: false
+      - key: CORS_ORIGINS # the Streamlit app's URL
+        sync: false
+      - key: SEED_DEMO_DATA
+        value: "true"
