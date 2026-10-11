@@ -11,7 +11,7 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app"]
+known-first-party = ["app", "api_client", "charts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
