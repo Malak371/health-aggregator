@@ -1,26 +1,107 @@
-def generate_recommendations(df, correlations, anomalies):
-    recommendations = []
-    
-    avg_sleep = df["sleep_hours"].mean()
-    if avg_sleep < 6:
-        recommendations.append(
-            "You’ve averaged under 6 hours of sleep. Consider prioritizing a consistent bedtime or limiting screen time before sleep."
+"""Rule-based next steps. Each one carries the observation that triggered it."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    message: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    """The latest values the rules look at. None means "not available"."""
+
+    avg_sleep_7d: float | None = None
+    sleep_sugar_r: float | None = None
+    recent_high_hr_days: int = 0
+    acwr: float | None = None
+    study_acute: float | None = None
+    burnout_score: float | None = None
+    recovery_direction: str = "unknown"
+
+
+def generate_recommendations(snapshot: Snapshot) -> list[Recommendation]:
+    found: list[Recommendation] = []
+
+    if snapshot.burnout_score is not None and snapshot.burnout_score >= 66:
+        found.append(
+            Recommendation(
+                "Several strain signals are high at once. Consider planning a lighter week: "
+                "fewer hard sessions, shorter study blocks and protected sleep.",
+                f"Burnout-risk score is {snapshot.burnout_score:.0f}/100.",
+            )
         )
-    
-    sleep_sugar_corr = correlations.get("sleep_sugar_corr")
-    if sleep_sugar_corr is not None and sleep_sugar_corr < -0.3:
-        recommendations.append(
-            "Shorter sleep appears to be associated with higher sugar intake. Improving sleep duration may help reduce cravings."
+
+    if snapshot.avg_sleep_7d is not None and snapshot.avg_sleep_7d < 6.5:
+        found.append(
+            Recommendation(
+                "Sleep has been short this week. A consistent bedtime or less screen time "
+                "before bed may help.",
+                f"7-day average sleep is {snapshot.avg_sleep_7d:.1f} h.",
+            )
         )
-    
-    if not anomalies["high_hr"].empty:
-        recommendations.append(
-            "Several days show elevated resting heart rate. You might consider lighter activity, hydration, or additional rest on those days."
+
+    if snapshot.acwr is not None and snapshot.acwr > 1.3:
+        found.append(
+            Recommendation(
+                "Training load is climbing faster than your recent norm. Holding volume "
+                "steady for a few days lets your body catch up.",
+                f"Acute:chronic workload ratio is {snapshot.acwr:.2f} (above 1.3).",
+            )
         )
-    
-    if not recommendations:
-        recommendations.append(
-            "Your recent data looks stable. Maintaining current habits may help sustain these trends."
+    elif snapshot.acwr is not None and snapshot.acwr < 0.8:
+        found.append(
+            Recommendation(
+                "Training load is well below your recent norm. If this is not a planned "
+                "rest week, ease back in gradually rather than all at once.",
+                f"Acute:chronic workload ratio is {snapshot.acwr:.2f} (below 0.8).",
+            )
         )
-    
-    return recommendations
+
+    if snapshot.study_acute is not None and snapshot.study_acute > 7:
+        found.append(
+            Recommendation(
+                "Study hours have been heavy all week. Short breaks and a hard stop time "
+                "in the evening help protect sleep.",
+                f"7-day average study time is {snapshot.study_acute:.1f} h/day.",
+            )
+        )
+
+    if snapshot.recent_high_hr_days:
+        found.append(
+            Recommendation(
+                "Resting heart rate was elevated recently. Lighter activity, hydration or "
+                "extra rest are reasonable on days like that.",
+                f"{snapshot.recent_high_hr_days} elevated day(s) in the last two weeks.",
+            )
+        )
+
+    if snapshot.sleep_sugar_r is not None and snapshot.sleep_sugar_r < -0.3:
+        found.append(
+            Recommendation(
+                "Shorter nights tend to come with more sugar. Improving sleep may make "
+                "cravings easier to manage.",
+                f"Sleep and sugar intake correlate at r = {snapshot.sleep_sugar_r:.2f}.",
+            )
+        )
+
+    if snapshot.recovery_direction == "declining" and not found:
+        found.append(
+            Recommendation(
+                "Readiness has dipped compared with last week. An easier day or two may help.",
+                "Mean readiness fell week over week.",
+            )
+        )
+
+    if not found:
+        found.append(
+            Recommendation(
+                "Your recent data looks stable. Keeping current habits should sustain it.",
+                "No rule was triggered.",
+            )
+        )
+    return found
