@@ -37,7 +37,7 @@ HEADER = """<?xml version="1.0" encoding="UTF-8"?>
 ]>
 <HealthData locale="en_US">
  <ExportDate value="2026-07-01 09:00:00 -0500"/>
- <Me HKCharacteristicTypeIdentifierDateOfBirth="" HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexNotSet"/>
+ <Me HKCharacteristicTypeIdentifierDateOfBirth=""/>
 """
 
 

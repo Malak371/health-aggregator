@@ -1,9 +1,9 @@
 import datetime as dt
 
 import pytest
+
 from app.ingestion.csv_daily import parse_daily_csv
 from app.ingestion.errors import IngestionError
-
 from tests.conftest import DEMO_CSV
 
 

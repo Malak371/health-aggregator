@@ -1,9 +1,9 @@
 import datetime as dt
 
 import pytest
+
 from app.ingestion.apple_health import parse_apple_health
 from app.ingestion.errors import IngestionError
-
 from tests.conftest import APPLE_HEALTH_XML
 
 
@@ -48,10 +48,19 @@ def test_steps_use_the_largest_source_instead_of_double_counting() -> None:
 
 def test_sleep_counts_asleep_stages_on_the_wake_up_day() -> None:
     content = export(
-        record(SLEEP, "2026-01-01 22:30:00", "2026-01-02 06:30:00", "HKCategoryValueSleepAnalysisInBed"),
+        record(
+            SLEEP, "2026-01-01 22:30:00", "2026-01-02 06:30:00", "HKCategoryValueSleepAnalysisInBed"
+        ),
         record(SLEEP, "2026-01-01 23:00:00", "2026-01-02 03:00:00", ASLEEP),
-        record(SLEEP, "2026-01-02 03:00:00", "2026-01-02 03:30:00", "HKCategoryValueSleepAnalysisAwake"),
-        record(SLEEP, "2026-01-02 03:30:00", "2026-01-02 06:30:00", "HKCategoryValueSleepAnalysisAsleepREM"),
+        record(
+            SLEEP, "2026-01-02 03:00:00", "2026-01-02 03:30:00", "HKCategoryValueSleepAnalysisAwake"
+        ),
+        record(
+            SLEEP,
+            "2026-01-02 03:30:00",
+            "2026-01-02 06:30:00",
+            "HKCategoryValueSleepAnalysisAsleepREM",
+        ),
     )
 
     records = parse_apple_health(content).records

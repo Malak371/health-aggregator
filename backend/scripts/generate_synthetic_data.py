@@ -24,9 +24,9 @@ START_DATE = dt.date(2026, 4, 1)
 OUTPUT = Path(__file__).resolve().parents[2] / "data" / "samples" / "demo_daily_metrics.csv"
 
 # Stretches of unusually heavy study (deadlines, exams), as (first_day, last_day).
-CRUNCH_PERIODS = [(48, 60), (118, 132)]
+CRUNCH_PERIODS = [(48, 60), (108, 120), (163, 176)]
 # Weeks in which training volume jumps well above the plan.
-OVERREACH_WEEKS = {7, 17, 22}
+OVERREACH_WEEKS = {7, 17, 23}
 
 
 def generate(days: int = DAYS, seed: int = SEED) -> pd.DataFrame:
@@ -39,7 +39,7 @@ def generate(days: int = DAYS, seed: int = SEED) -> pd.DataFrame:
         week, weekday = divmod(day, 7)
 
         # Training: three build weeks then a lighter week, two rest days a week.
-        block_factor = (0.85, 1.0, 1.15, 0.6)[week % 4]
+        block_factor = (0.85, 1.0, 1.15, 0.7)[week % 4]
         if week in OVERREACH_WEEKS:
             block_factor *= 1.6
         if weekday in (2, 6) or rng.random() < 0.05:
