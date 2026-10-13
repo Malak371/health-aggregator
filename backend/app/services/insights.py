@@ -93,6 +93,7 @@ def build_insights(slug: str, frame: pd.DataFrame) -> InsightsOut:
             study_acute=_number(latest_load["study_acute"]),
             burnout_score=score,
             recovery_direction=trend.direction,
+            days_logged=int(frame.notna().any(axis=1).sum()),
         )
     )
 

@@ -51,8 +51,9 @@ def dataset_from_path(slug: str, session: SessionDep) -> Dataset:
     dataset = store.get_dataset(session, slug)
     if dataset is None:
         raise HTTPException(
-            404, f"Dataset '{slug}' does not exist. Uploaded datasets expire after a while."
+            404, f"Dataset '{slug}' does not exist. Datasets expire when they are not used."
         )
+    store.record_activity(session, dataset)
     return dataset
 
 
@@ -83,7 +84,7 @@ def create_dataset(
     session: SessionDep, settings: SettingsDep, body: DatasetCreate | None = None
 ) -> DatasetOut:
     """Create an empty dataset for uploads. Keep the returned `slug`: it is the only key."""
-    store.purge_expired_uploads(session, settings.upload_ttl_hours)
+    store.purge_expired_uploads(session, settings.upload_ttl_days)
     if store.count_uploads(session) >= settings.max_upload_datasets:
         raise HTTPException(429, "The demo is at capacity for uploads. Please try again later.")
     dataset = store.create_upload_dataset(session, (body or DatasetCreate()).name)

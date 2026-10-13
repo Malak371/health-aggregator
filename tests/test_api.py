@@ -130,17 +130,93 @@ def test_dataset_can_be_deleted(client: TestClient, upload_slug: str) -> None:
     assert client.get(f"/api/v1/datasets/{upload_slug}").status_code == 404
 
 
-def test_expired_uploads_are_purged_when_a_new_one_is_created(
+def set_last_active(client: TestClient, slug: str, days_ago: int) -> None:
+    with client.app.state.session_factory() as session:  # type: ignore[attr-defined]
+        dataset = session.query(Dataset).filter_by(slug=slug).one()
+        dataset.last_active_at = dt.datetime.now(dt.UTC) - dt.timedelta(days=days_ago)
+        session.commit()
+
+
+def days_since_active(client: TestClient, slug: str) -> float:
+    with client.app.state.session_factory() as session:  # type: ignore[attr-defined]
+        last_active = session.query(Dataset).filter_by(slug=slug).one().last_active_at
+    if last_active.tzinfo is None:  # SQLite returns naive UTC datetimes
+        last_active = last_active.replace(tzinfo=dt.UTC)
+    return (dt.datetime.now(dt.UTC) - last_active).total_seconds() / 86400
+
+
+def test_datasets_unused_for_the_retention_period_are_purged(
     client: TestClient, upload_slug: str
 ) -> None:
-    with client.app.state.session_factory() as session:  # type: ignore[attr-defined]
-        dataset = session.query(Dataset).filter_by(slug=upload_slug).one()
-        dataset.created_at = dt.datetime.now(dt.UTC) - dt.timedelta(days=3)
-        session.commit()
+    set_last_active(client, upload_slug, days_ago=91)
 
     client.post("/api/v1/datasets")
 
     assert client.get(f"/api/v1/datasets/{upload_slug}").status_code == 404
+
+
+def test_datasets_used_within_the_retention_period_are_kept(
+    client: TestClient, upload_slug: str
+) -> None:
+    set_last_active(client, upload_slug, days_ago=89)
+
+    client.post("/api/v1/datasets")
+
+    assert client.get(f"/api/v1/datasets/{upload_slug}").status_code == 200
+
+
+def test_opening_a_dataset_counts_as_activity(client: TestClient, upload_slug: str) -> None:
+    set_last_active(client, upload_slug, days_ago=60)
+
+    client.get(f"/api/v1/datasets/{upload_slug}")
+
+    assert days_since_active(client, upload_slug) < 0.01
+
+
+def test_activity_is_recorded_at_most_once_a_day(client: TestClient, upload_slug: str) -> None:
+    set_last_active(client, upload_slug, days_ago=0)
+    before = days_since_active(client, upload_slug)
+
+    client.get(f"/api/v1/datasets/{upload_slug}")
+
+    assert days_since_active(client, upload_slug) >= before
+
+
+def test_a_check_in_creates_a_day_and_later_ones_merge_into_it(
+    client: TestClient, upload_slug: str
+) -> None:
+    base = f"/api/v1/datasets/{upload_slug}"
+    set_last_active(client, upload_slug, days_ago=30)
+
+    morning = client.post(
+        f"{base}/records", json={"records": [{"date": "2026-10-13", "sleep_hours": 7.5}]}
+    )
+    evening = client.post(
+        f"{base}/records",
+        json={"records": [{"date": "2026-10-13", "mood_score": 4, "study_hours": 3}]},
+    )
+
+    assert (morning.json()["days_added"], evening.json()["days_updated"]) == (1, 1)
+    day = client.get(f"{base}/metrics").json()[0]
+    assert (day["sleep_hours"], day["mood_score"], day["study_hours"]) == (7.5, 4, 3)
+    assert days_since_active(client, upload_slug) < 0.01
+
+
+def test_a_single_logged_day_already_has_insights(client: TestClient, upload_slug: str) -> None:
+    base = f"/api/v1/datasets/{upload_slug}"
+    client.post(
+        f"{base}/records",
+        json={"records": [{"date": "2026-10-13", "sleep_hours": 7, "mood_score": 4}]},
+    )
+
+    insights = client.get(f"{base}/insights").json()
+    derived = client.get(f"{base}/metrics/derived").json()
+
+    assert insights["days"] == 1
+    assert insights["recovery"]["readiness_today"] is not None
+    assert "Keep logging" in insights["recommendations"][0]["message"]
+    assert derived[0]["acwr"] is None
+    assert client.get(f"{base}/prediction").json()["available"] is False
 
 
 def test_upload_capacity_is_enforced(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

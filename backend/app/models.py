@@ -25,6 +25,8 @@ class Dataset(Base):
     name: Mapped[str] = mapped_column(String(120))
     source: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Last read or write. Visitor datasets expire after a period of inactivity.
+    last_active_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     metrics: Mapped[list[DailyMetric]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan", order_by="DailyMetric.date"
