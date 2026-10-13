@@ -1,4 +1,6 @@
 import datetime as dt
+import io
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -289,6 +291,38 @@ def test_apple_health_import(client: TestClient, upload_slug: str) -> None:
     assert insights["load"]["acwr"] is not None
     assert insights["recovery"]["readiness_today"] is not None
     assert client.get(f"{base}/prediction").json()["available"] is True
+
+
+def test_apple_health_zip_import(client: TestClient, upload_slug: str) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(APPLE_HEALTH_XML, "apple_health_export/export.xml")
+
+    result = client.post(
+        f"/api/v1/datasets/{upload_slug}/import/apple-health",
+        files={"file": ("export.zip", buffer.getvalue(), "application/zip")},
+    )
+
+    assert result.status_code == 200
+    assert result.json()["days_added"] == 150
+
+
+def test_apple_health_zip_beyond_the_unzipped_limit_is_rejected(
+    client: TestClient, upload_slug: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(get_settings(), "max_unzipped_mb", 0)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(APPLE_HEALTH_XML, "apple_health_export/export.xml")
+
+    response = client.post(
+        f"/api/v1/datasets/{upload_slug}/import/apple-health",
+        files={"file": ("export.zip", buffer.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 422
+    assert "too large once unzipped" in response.json()["detail"]["message"]
+    assert client.get(f"/api/v1/datasets/{upload_slug}").json()["days"] == 0
 
 
 def test_a_csv_sent_to_the_apple_health_endpoint_is_rejected(
