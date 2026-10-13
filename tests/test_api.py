@@ -348,4 +348,4 @@ def test_short_datasets_get_insights_but_no_prediction(
 
     assert insights.status_code == 200
     assert prediction["available"] is False
-    assert "at least 81 days" in prediction["reason"]
+    assert "about 81 days" in prediction["reason"]

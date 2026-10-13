@@ -30,7 +30,7 @@ DEMO_CSV = Path(__file__).resolve().parents[2] / "data" / "samples" / "demo_dail
 
 def main() -> None:
     frame = pd.read_csv(DEMO_CSV, parse_dates=["date"]).set_index("date").astype("float64")
-    features, target = _labelled(frame)
+    features, target, _ = _labelled(frame)
     usable = target.notna()
     x, score = features[usable], target[usable]
 

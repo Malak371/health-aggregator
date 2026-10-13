@@ -30,7 +30,8 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from app.ml.features import FEATURE_LABELS, build_features, next_day_readiness
+from app.analytics.recovery import readiness_score
+from app.ml.features import FEATURE_LABELS, build_features
 
 TEST_FRACTION = 0.25
 LOW_READINESS_QUANTILE = 1 / 3
@@ -128,26 +129,48 @@ def choose_regularisation(x: pd.DataFrame, y: pd.Series) -> float:
     return max(REGULARISATION_GRID, key=lambda c: float(np.mean(scores[c])))
 
 
-def _labelled(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    features = build_features(frame).iloc[WARM_UP_DAYS:]
+def _labelled(
+    frame: pd.DataFrame,
+    score: pd.Series | None = None,
+    extra_features: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """Features for day t, the score on day t + 1, and the score on day t.
+
+    `score` is the daily quantity whose low days are predicted (higher is better).
+    It defaults to the readiness score computed from the frame; an evaluation can
+    pass an independently measured one instead.
+    """
+    features = build_features(frame)
+    if extra_features is not None:
+        features = features.join(extra_features)
+    features = features.iloc[WARM_UP_DAYS:]
     features = features.loc[:, features.notna().mean() >= MIN_FEATURE_COVERAGE]
     if features.shape[1] < 2:
         raise InsufficientDataError(
             "Too few signals are recorded to build features (at least two are needed)."
         )
-    target = next_day_readiness(frame).reindex(features.index)
-    return features, target
+    today = readiness_score(frame) if score is None else score.reindex(frame.index)
+    target = today.shift(-1).reindex(features.index)
+    return features, target, today.reindex(features.index)
 
 
-def train_and_explain(frame: pd.DataFrame) -> ReadinessReport:
-    """Evaluate on a chronological hold-out, then refit on everything to predict tomorrow."""
-    features, target = _labelled(frame)
+def train_and_explain(
+    frame: pd.DataFrame,
+    score: pd.Series | None = None,
+    extra_features: pd.DataFrame | None = None,
+) -> ReadinessReport:
+    """Evaluate on a chronological hold-out, then refit on everything to predict tomorrow.
+
+    See `_labelled` for `score` and `extra_features`; the API uses neither.
+    """
+    features, target, score_today = _labelled(frame, score, extra_features)
     usable = target.notna() & features.notna().any(axis=1)
     x, y_score = features[usable], target[usable]
     if len(x) < MIN_LABELLED_DAYS:
         raise InsufficientDataError(
-            f"The model needs at least {MIN_LABELLED_DAYS + WARM_UP_DAYS} days of data; "
-            f"this dataset has {len(frame)}."
+            f"The model needs {MIN_LABELLED_DAYS} days with a next-day score after a "
+            f"{WARM_UP_DAYS}-day warm-up (about {MIN_LABELLED_DAYS + WARM_UP_DAYS} days of data); "
+            f"this dataset has {len(x)} such days out of {len(frame)}."
         )
 
     split = int(len(x) * (1 - TEST_FRACTION))
@@ -175,8 +198,9 @@ def train_and_explain(frame: pd.DataFrame) -> ReadinessReport:
         predictions = (probabilities >= 0.5).astype(int)
 
         persistence: float | None = None
-        today = x_test.get("readiness_today")
-        if today is not None and today.notna().mean() > 0.9:
+        # Persistence ranks tomorrow by today's value of the same score.
+        today = score_today.reindex(x_test.index)
+        if today.notna().mean() > 0.9:
             persistence = float(roc_auc_score(y_test, -today.fillna(today.median())))
 
         evaluation = Evaluation(
@@ -200,7 +224,7 @@ def train_and_explain(frame: pd.DataFrame) -> ReadinessReport:
     coefficients = final.named_steps["model"].coef_[0]
     effects = sorted(
         (
-            FeatureEffect(name, FEATURE_LABELS[name], round(float(coef), 3))
+            FeatureEffect(name, FEATURE_LABELS.get(name, name), round(float(coef), 3))
             for name, coef in zip(names, coefficients, strict=True)
         ),
         key=lambda effect: abs(effect.coefficient),
@@ -213,7 +237,7 @@ def train_and_explain(frame: pd.DataFrame) -> ReadinessReport:
         (
             Contribution(
                 feature=name,
-                label=FEATURE_LABELS[name],
+                label=FEATURE_LABELS.get(name, name),
                 value=None if np.isnan(raw) else round(float(raw), 2),
                 contribution=round(float(coef * z), 3),
             )

@@ -83,7 +83,7 @@ def test_features_that_were_never_recorded_are_left_out(demo_frame: pd.DataFrame
 
 
 def test_short_datasets_are_refused_with_an_explanation(demo_frame: pd.DataFrame) -> None:
-    with pytest.raises(InsufficientDataError, match="at least 81 days"):
+    with pytest.raises(InsufficientDataError, match="about 81 days"):
         train_and_explain(demo_frame.iloc[:45])
 
 
