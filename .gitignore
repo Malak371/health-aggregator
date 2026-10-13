@@ -23,3 +23,6 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Third-party datasets downloaded for evaluation (never committed)
+data/external/
