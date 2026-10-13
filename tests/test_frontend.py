@@ -89,9 +89,11 @@ def test_a_check_in_creates_a_private_dataset_and_saves_the_day(
     dashboard.run()
 
     assert not dashboard.exception
-    slug = dashboard.query_params["data"][0]
+    # Streamlit's test harness returns a list or a string depending on its version.
+    key = dashboard.query_params["data"]
+    slug = key if isinstance(key, str) else key[0]
     stored = client.get(f"/api/v1/datasets/{slug}/metrics").json()
-    assert len(stored) == 1
+    assert isinstance(stored, list) and len(stored) == 1
     assert (stored[0]["date"], stored[0]["sleep_hours"], stored[0]["study_hours"]) == (
         today.isoformat(),
         7.5,
