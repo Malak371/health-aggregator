@@ -18,7 +18,7 @@
 ## What it does
 
 - **Unified dashboard** for sleep, steps, resting heart rate, mood, sugar intake, training and study time.
-- **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health `export.xml`. A synthetic sample of each is bundled, so the demo works without personal data.
+- **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health `export.xml`. The page address becomes a private link to your upload for a day. A synthetic sample of each is bundled, so the demo works without personal data.
 - **Rolling load**: session-RPE training load, 7-day acute and 28-day chronic averages, and the acute:chronic workload ratio (ACWR), plus the same for study hours.
 - **Recovery**: a 0-100 readiness score from sleep, resting heart rate against your own baseline, and mood, with a week-over-week trend.
 - **Burnout-risk score**: a transparent weighted score that shows how many points each strain signal contributes.
