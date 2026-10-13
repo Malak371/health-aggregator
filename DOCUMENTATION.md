@@ -46,9 +46,13 @@ Design decisions:
 
 - **The dashboard has no logic.** It calls the API and draws what comes back. Every number can therefore be tested without a browser, and another client could reuse the API.
 - **Analytics are pure functions of a DataFrame.** `analytics/` and `ml/` know nothing about HTTP or the database, which keeps them easy to test with hand-made frames.
-- **Datasets instead of accounts.** There is no login. The bundled demo data lives in a read-only dataset called `demo`. Each visitor who uploads a file gets their own dataset, addressed by a random 128-bit slug. The dashboard puts that slug in the page address (`?data=...`), which makes the address a private link: reloading or bookmarking it returns to the same data, and sharing it shares the data. The API never lists datasets, uploaded datasets are deleted after `UPLOAD_TTL_HOURS` (24 by default), and their number is capped.
+- **Datasets instead of accounts.** There is no login. The bundled demo data lives in a read-only dataset called `demo`. Each visitor who uploads a file gets their own dataset, addressed by a random 128-bit slug. The dashboard puts that slug in the page address (`?data=...`), which makes the address a private link: reloading or bookmarking it returns to the same data, and sharing it shares the data. The API never lists datasets, a visitor's dataset is deleted after `UPLOAD_TTL_DAYS` (90 by default) without being opened or changed, and the number of datasets is capped.
 - **Models are trained on request.** The model is a logistic regression on at most a few hundred rows and trains in about 0.1 s, so there are no model files to version or deploy and the result always matches the data.
 - **One error shape.** Every 4xx response is `{"detail": {"message": "...", "errors": ["..."]}}`, so clients can show a headline and the specifics.
+
+### Daily check-in
+
+The dashboard's check-in form posts one day to `POST /records`. Values are merged into the day if it already exists, so a morning entry (sleep) and an evening entry (mood, training, study) add up to one row, and a check-in can fill in the signals a wearable export lacks. The first check-in creates the visitor's dataset and turns the page address into their private link.
 
 ### Request flow for an upload
 
@@ -69,6 +73,7 @@ erDiagram
         string name
         string source "synthetic | upload"
         datetime created_at
+        datetime last_active_at "drives expiry"
     }
     DAILY_METRICS {
         int id PK
@@ -237,8 +242,8 @@ Expanding-window cross-validation over the whole dataset (`backend/scripts/compa
 ## 7. Privacy and security
 
 - No accounts and no personal identifiers are stored; a dataset is a set of daily numbers under a random key.
-- Uploads expire automatically and can be deleted from the dashboard at any time.
-- The private link is a capability: anyone who has it can read that dataset until it expires. It appears in the browser's address bar and history, so it should be treated like a password for the day it lasts.
+- Visitor datasets expire automatically after 90 days without use and can be deleted from the dashboard at any time.
+- The private link is a capability: anyone who has it can read and add to that dataset until it expires. It appears in the browser's address bar and history, so it should be treated like a password. Real accounts are on the roadmap.
 - XML is parsed with `defusedxml`, which refuses entity-expansion attacks; uploads are size-limited.
 - Secrets (the production database URL) are set in the hosting dashboards. `.env` files are git-ignored and `.env.example` documents the variables.
 - Known gap: there is no rate limiting beyond the cap on the number of uploaded datasets.
@@ -249,7 +254,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: the API runs as a Docker
 
 ## 9. Testing
 
-`pytest` runs 103 tests:
+`pytest` covers:
 
 - **Analytics:** hand-built frames with known answers for load, ACWR, readiness, burnout, correlations and each anomaly rule.
 - **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML.

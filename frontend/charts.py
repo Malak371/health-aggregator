@@ -11,6 +11,7 @@ AQUA = "#1baf7a"
 MUTED = "#898781"
 SERIES_COLORS = (BLUE, ORANGE, AQUA)
 HEIGHT = 240
+SHOW_POINTS_UP_TO = 14
 
 
 def time_series(
@@ -33,7 +34,8 @@ def time_series(
 
     lines = (
         alt.Chart(long)
-        .mark_line(strokeWidth=2)
+        # A line needs two points to be visible, so short series also get markers.
+        .mark_line(strokeWidth=2, point=len(wide) <= SHOW_POINTS_UP_TO)
         .encode(
             x=alt.X("date:T", title=None),
             y=alt.Y("value:Q", title=y_title, scale=scale),

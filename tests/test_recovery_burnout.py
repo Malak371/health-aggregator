@@ -101,3 +101,10 @@ def test_recommendations_fall_back_to_a_stable_message() -> None:
 
     assert len(found) == 1
     assert "stable" in found[0].message
+
+
+def test_recommendations_do_not_call_a_few_days_of_data_stable() -> None:
+    found = generate_recommendations(Snapshot(days_logged=3))
+
+    assert "Keep logging" in found[0].message
+    assert "3 day(s)" in found[0].reason

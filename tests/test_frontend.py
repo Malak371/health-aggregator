@@ -1,5 +1,6 @@
 """Full-stack smoke tests: the real dashboard script against the real API."""
 
+import datetime as dt
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,11 @@ def dashboard(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> AppTest:
     return AppTest.from_file(str(FRONTEND / "app.py"), default_timeout=30)
 
 
+def dataset_choice(dashboard: AppTest) -> Any:
+    """The sidebar's dataset selector."""
+    return next(radio for radio in dashboard.radio if radio.label == "Dataset")
+
+
 def test_dashboard_renders_the_demo_data(dashboard: AppTest) -> None:
     dashboard.run()
 
@@ -53,8 +59,8 @@ def test_a_private_link_reopens_the_uploaded_dataset(
     dashboard.run()
 
     assert not dashboard.exception
-    assert dashboard.radio[0].options == ["Demo data (synthetic)", "My upload"]
-    assert dashboard.radio[0].value == "My upload"
+    assert dataset_choice(dashboard).options == ["Demo data (synthetic)", "My data"]
+    assert dataset_choice(dashboard).value == "My data"
     assert not any("synthetic demo data" in info.value for info in dashboard.info)
     assert any("private link" in caption.value for caption in dashboard.caption)
 
@@ -65,10 +71,49 @@ def test_an_expired_private_link_falls_back_to_the_demo(dashboard: AppTest) -> N
     dashboard.run()
 
     assert not dashboard.exception
-    assert dashboard.radio[0].options == ["Demo data (synthetic)"]
+    assert dataset_choice(dashboard).options == ["Demo data (synthetic)"]
     assert "data" not in dashboard.query_params
     assert any("has expired" in warning.value for warning in dashboard.warning)
     assert any("synthetic demo data" in info.value for info in dashboard.info)
+
+
+def test_a_check_in_creates_a_private_dataset_and_saves_the_day(
+    client: TestClient, dashboard: AppTest
+) -> None:
+    dashboard.run()
+    today = dt.date.today()
+
+    dashboard.number_input(key=f"checkin_sleep_hours_{today}").set_value(7.5)
+    dashboard.number_input(key=f"checkin_study_hours_{today}").set_value(3.0)
+    dashboard.button(key="checkin_save").click()
+    dashboard.run()
+
+    assert not dashboard.exception
+    # Streamlit's test harness returns a list or a string depending on its version.
+    key = dashboard.query_params["data"]
+    slug = key if isinstance(key, str) else key[0]
+    stored = client.get(f"/api/v1/datasets/{slug}/metrics").json()
+    assert isinstance(stored, list) and len(stored) == 1
+    assert (stored[0]["date"], stored[0]["sleep_hours"], stored[0]["study_hours"]) == (
+        today.isoformat(),
+        7.5,
+        3.0,
+    )
+    assert stored[0]["mood_score"] is None
+    assert any("Saved" in message.value for message in dashboard.success)
+    assert dataset_choice(dashboard).value == "My data"
+    # The form now shows what was saved.
+    assert dashboard.number_input(key=f"checkin_sleep_hours_{today}").value == 7.5
+
+
+def test_an_empty_check_in_is_not_saved(client: TestClient, dashboard: AppTest) -> None:
+    dashboard.run()
+
+    dashboard.button(key="checkin_save").click()
+    dashboard.run()
+
+    assert any("at least one field" in warning.value for warning in dashboard.warning)
+    assert "data" not in dashboard.query_params
 
 
 def test_frontend_client_fetches_several_paths_at_once(

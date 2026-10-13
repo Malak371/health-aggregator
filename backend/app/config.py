@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8501"
     seed_demo_data: bool = True
     max_upload_mb: int = 20
-    upload_ttl_hours: int = 24
+    # Visitor datasets are deleted after this many days without being opened or changed.
+    upload_ttl_days: int = 90
     # Upper bound on visitor datasets kept at once, to protect a small free database.
     max_upload_datasets: int = 200
 

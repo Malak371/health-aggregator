@@ -5,14 +5,17 @@ from __future__ import annotations
 import datetime as dt
 import secrets
 from collections.abc import Sequence
+from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import DEMO_CSV
 from app.ingestion.csv_daily import parse_daily_csv
 from app.models import DEMO_SLUG, DailyMetric, Dataset
 from app.schemas import METRIC_FIELDS, DailyRecord, DatasetOut
+
+ACTIVITY_RESOLUTION = dt.timedelta(days=1)
 
 
 def get_dataset(session: Session, slug: str) -> Dataset | None:
@@ -80,6 +83,7 @@ def upsert_records(
             for name, value in values.items():
                 setattr(row, name, value)
             updated += 1
+    dataset.last_active_at = dt.datetime.now(dt.UTC)
     session.commit()
     return added, updated
 
@@ -89,11 +93,34 @@ def delete_dataset(session: Session, dataset: Dataset) -> None:
     session.commit()
 
 
-def purge_expired_uploads(session: Session, ttl_hours: int) -> int:
-    """Delete visitor datasets older than the retention window."""
-    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(hours=ttl_hours)
+def record_activity(session: Session, dataset: Dataset) -> None:
+    """Note that a visitor dataset was used, at most once a day.
+
+    The comparison happens in SQL so that most requests issue an UPDATE that
+    matches nothing, rather than writing a row on every read.
+    """
+    if dataset.is_demo:
+        return
+    now = dt.datetime.now(dt.UTC)
+    result = cast(
+        "CursorResult[Any]",
+        session.execute(
+            update(Dataset)
+            .where(Dataset.id == dataset.id, Dataset.last_active_at < now - ACTIVITY_RESOLUTION)
+            .values(last_active_at=now)
+            # Let the database do the comparison; the loaded object is not consulted.
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount:
+        session.commit()
+
+
+def purge_expired_uploads(session: Session, ttl_days: int) -> int:
+    """Delete visitor datasets that have not been used within the retention window."""
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=ttl_days)
     expired = session.scalars(
-        select(Dataset).where(Dataset.slug != DEMO_SLUG, Dataset.created_at < cutoff)
+        select(Dataset).where(Dataset.slug != DEMO_SLUG, Dataset.last_active_at < cutoff)
     ).all()
     for dataset in expired:
         session.delete(dataset)

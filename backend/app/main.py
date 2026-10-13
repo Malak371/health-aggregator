@@ -33,7 +33,7 @@ The `demo` dataset is synthetic and read-only. **Nothing here is medical advice.
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     with app.state.session_factory() as session:
-        store.purge_expired_uploads(session, settings.upload_ttl_hours)
+        store.purge_expired_uploads(session, settings.upload_ttl_days)
         if settings.seed_demo_data:
             demo = records_to_frame(store.seed_demo(session).metrics)
             # Train the demo model in the background so the first visitor does not

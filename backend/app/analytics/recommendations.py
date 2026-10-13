@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Below this many days there is too little data to call anything "stable".
+MIN_DAYS = 7
+
 
 @dataclass(frozen=True)
 class Recommendation:
@@ -22,6 +25,7 @@ class Snapshot:
     study_acute: float | None = None
     burnout_score: float | None = None
     recovery_direction: str = "unknown"
+    days_logged: int | None = None
 
 
 def generate_recommendations(snapshot: Snapshot) -> list[Recommendation]:
@@ -94,6 +98,14 @@ def generate_recommendations(snapshot: Snapshot) -> list[Recommendation]:
             Recommendation(
                 "Readiness has dipped compared with last week. An easier day or two may help.",
                 "Mean readiness fell week over week.",
+            )
+        )
+
+    if not found and snapshot.days_logged is not None and snapshot.days_logged < MIN_DAYS:
+        found.append(
+            Recommendation(
+                "Keep logging. Trends and recommendations start to appear after about a week.",
+                f"Only {snapshot.days_logged} day(s) of data so far.",
             )
         )
 
