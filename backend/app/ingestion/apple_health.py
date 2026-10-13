@@ -1,4 +1,5 @@
-"""Parser for Apple Health exports (the export.xml inside export.zip).
+"""Parser for Apple Health exports: export.zip as produced by the Health app, or
+the export.xml inside it.
 
 The export is a flat list of timestamped <Record> and <Workout> elements.
 This module reduces them to one row per day:
@@ -19,7 +20,9 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import zipfile
 from collections import defaultdict
+from typing import IO, Protocol
 
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
@@ -36,8 +39,24 @@ SLEEP_TYPE = "HKCategoryTypeIdentifierSleepAnalysis"
 # "InBed" and "Awake" are deliberately not counted as sleep.
 ASLEEP_PREFIX = "HKCategoryValueSleepAnalysisAsleep"
 
+
+class SupportsRead(Protocol):
+    def read(self, size: int = -1, /) -> bytes: ...
+
+
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S %z"
 DURATION_TO_MINUTES = {"min": 1.0, "hr": 60.0, "s": 1 / 60}
+
+
+def _day(value: str | None) -> dt.date:
+    """The local calendar date of a timestamp such as "2026-04-01 08:00:00 -0500".
+
+    Only the date part is parsed: an export holds hundreds of thousands of
+    records, and full timestamp parsing was half of the total import time.
+    """
+    if not value:
+        raise ValueError("missing timestamp")
+    return dt.date.fromisoformat(value[:10])
 
 
 def _timestamp(value: str | None) -> dt.datetime:
@@ -46,8 +65,80 @@ def _timestamp(value: str | None) -> dt.datetime:
     return dt.datetime.strptime(value, TIMESTAMP_FORMAT)
 
 
-def parse_apple_health(content: bytes) -> ParseResult:
-    """Aggregate an Apple Health export.xml into daily records."""
+class _LimitedReader:
+    """Wraps a binary stream and refuses to yield more than `limit` bytes.
+
+    A zip member's declared size can be forged, so the limit is enforced on what
+    is actually decompressed.
+    """
+
+    def __init__(self, stream: IO[bytes], limit: int) -> None:
+        self._stream = stream
+        self._remaining = limit
+        self._limit = limit
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = self._stream.read(size if size and size > 0 else 1024 * 1024)
+        self._remaining -= len(chunk)
+        if self._remaining < 0:
+            raise IngestionError(
+                "The export is too large once unzipped.",
+                [f"The limit is {self._limit // (1024 * 1024)} MB of XML."],
+            )
+        return chunk
+
+
+def _export_member(archive: zipfile.ZipFile) -> zipfile.ZipInfo:
+    """The health records file inside an export.zip.
+
+    Apple names it export.xml (the name is translated in some languages) and puts
+    a clinical summary, export_cda.xml, next to it, plus GPX routes in subfolders.
+    """
+    candidates = [
+        info
+        for info in archive.infolist()
+        if info.filename.lower().endswith(".xml")
+        and not info.filename.lower().endswith("_cda.xml")
+        and info.filename.count("/") <= 1
+    ]
+    if not candidates:
+        raise IngestionError(
+            "The zip file does not contain an Apple Health export.",
+            ["Expected a file such as apple_health_export/export.xml."],
+        )
+    named = [info for info in candidates if info.filename.lower().endswith("export.xml")]
+    return max(named or candidates, key=lambda info: info.file_size)
+
+
+def parse_apple_health_upload(content: bytes, max_xml_bytes: int) -> ParseResult:
+    """Parse an upload that is either export.xml itself or Apple's export.zip.
+
+    The XML inside a zip is decompressed as a stream, so it never has to fit in
+    memory; `max_xml_bytes` bounds how much is read.
+    """
+    buffer = io.BytesIO(content)
+    if not zipfile.is_zipfile(buffer):
+        return parse_apple_health(content)
+    try:
+        with zipfile.ZipFile(buffer) as archive:
+            member = _export_member(archive)
+            if member.file_size > max_xml_bytes:
+                raise IngestionError(
+                    "The export is too large once unzipped.",
+                    [
+                        f"{member.filename} is {member.file_size // (1024 * 1024)} MB; "
+                        f"the limit is {max_xml_bytes // (1024 * 1024)} MB."
+                    ],
+                )
+            with archive.open(member) as stream:
+                return parse_apple_health(_LimitedReader(stream, max_xml_bytes))
+    except (zipfile.BadZipFile, NotImplementedError, RuntimeError) as exc:
+        # RuntimeError: password-protected; NotImplementedError: unsupported compression.
+        raise IngestionError("The zip file could not be read.", [str(exc)]) from exc
+
+
+def parse_apple_health(export: bytes | SupportsRead) -> ParseResult:
+    """Aggregate an Apple Health export.xml (bytes or a binary stream) into daily records."""
     steps: defaultdict[dt.date, defaultdict[str, float]] = defaultdict(lambda: defaultdict(float))
     sleep: defaultdict[dt.date, defaultdict[str, float]] = defaultdict(lambda: defaultdict(float))
     resting_hr: defaultdict[dt.date, list[float]] = defaultdict(list)
@@ -58,7 +149,8 @@ def parse_apple_health(content: bytes) -> ParseResult:
 
     try:
         # iterparse keeps memory flat: exports hold millions of records.
-        for event, element in ElementTree.iterparse(io.BytesIO(content), events=("start", "end")):
+        stream = io.BytesIO(export) if isinstance(export, bytes) else export
+        for event, element in ElementTree.iterparse(stream, events=("start", "end")):
             if event == "start":
                 if root_tag is None:
                     root_tag = element.tag
@@ -68,20 +160,20 @@ def parse_apple_health(content: bytes) -> ParseResult:
                     kind = element.get("type")
                     source = element.get("sourceName", "unknown")
                     if kind == STEP_TYPE:
-                        day = _timestamp(element.get("startDate")).date()
+                        day = _day(element.get("startDate"))
                         steps[day][source] += float(element.get("value", ""))
                     elif kind == RESTING_HR_TYPE:
-                        day = _timestamp(element.get("startDate")).date()
+                        day = _day(element.get("startDate"))
                         resting_hr[day].append(float(element.get("value", "")))
                     elif kind == SUGAR_TYPE:
-                        day = _timestamp(element.get("startDate")).date()
+                        day = _day(element.get("startDate"))
                         sugar[day] += float(element.get("value", ""))
                     elif kind == SLEEP_TYPE and element.get("value", "").startswith(ASLEEP_PREFIX):
                         start = _timestamp(element.get("startDate"))
                         end = _timestamp(element.get("endDate"))
                         sleep[end.date()][source] += (end - start).total_seconds() / 3600
                 elif element.tag == "Workout":
-                    day = _timestamp(element.get("startDate")).date()
+                    day = _day(element.get("startDate"))
                     unit = DURATION_TO_MINUTES[element.get("durationUnit", "min")]
                     workouts[day] += float(element.get("duration", "")) * unit
             except (ValueError, KeyError):

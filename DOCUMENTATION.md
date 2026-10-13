@@ -105,7 +105,7 @@ Interactive documentation is served at `/docs`. All dataset routes are under `/a
 | GET | `/api/v1/datasets/{slug}` | Name, source, number of days, date range |
 | DELETE | `/api/v1/datasets/{slug}` | Delete an uploaded dataset |
 | POST | `/api/v1/datasets/{slug}/import/csv` | Import a daily-metrics CSV |
-| POST | `/api/v1/datasets/{slug}/import/apple-health` | Import an Apple Health `export.xml` |
+| POST | `/api/v1/datasets/{slug}/import/apple-health` | Import an Apple Health `export.zip` or `export.xml` |
 | POST | `/api/v1/datasets/{slug}/records` | Add or update days as JSON |
 | GET | `/api/v1/datasets/{slug}/metrics` | Raw daily records, optional `start` / `end` |
 | GET | `/api/v1/datasets/{slug}/metrics/derived` | Per-day load, ACWR, readiness, burnout risk |
@@ -116,7 +116,7 @@ Interactive documentation is served at `/docs`. All dataset routes are under `/a
 
 **Daily-metrics CSV.** One row per day, a `date` column (ISO format) and any of the metric columns from the data model. Example: `data/samples/demo_daily_metrics.csv`.
 
-**Apple Health export.** The `export.xml` file inside the `export.zip` that the Health app produces. The parser streams the file with `defusedxml` and aggregates per day:
+**Apple Health export.** Either the `export.zip` that the Health app produces, uploaded as it is, or the `export.xml` inside it. From a zip, the records file is found by name (it is translated in some languages; the clinical summary `export_cda.xml` and GPX routes are ignored) and decompressed as a stream, so it never has to fit in memory. The parser reads it with `defusedxml` and aggregates per day:
 
 | Daily value | Apple Health source | Rule |
 | --- | --- | --- |
@@ -126,7 +126,7 @@ Interactive documentation is served at `/docs`. All dataset routes are under `/a
 | `sugar_grams` | `HKQuantityTypeIdentifierDietarySugar` | Sum |
 | `training_minutes` | `Workout` elements | Sum of durations |
 
-`data/samples/apple_health_export_sample.xml` is a synthetic file written in this format by `backend/scripts/generate_apple_health_sample.py`. Limitations: uploads are capped at `MAX_UPLOAD_MB` (20 MB by default), and multi-year exports are often larger than that; the parser has been tested against the format as documented and against the synthetic sample, not against a wide range of real devices.
+`data/samples/apple_health_export_sample.xml` is a synthetic file written in this format by `backend/scripts/generate_apple_health_sample.py`. Limitations: uploads are capped at `MAX_UPLOAD_MB` (20 MB by default) and the XML inside a zip at `MAX_UNZIPPED_MB` (200 MB by default), enforced on the bytes actually decompressed. Export XML compresses very well, so the zip limit covers far more history than the same limit did for raw XML, but a multi-year export with many workout routes can still exceed it. Parsing runs at roughly 45 MB of XML per second on a laptop and much slower on the free hosting tier; the parser has been tested against the format as documented and against the synthetic sample, not against a wide range of real devices.
 
 ## 5. Analytics
 
@@ -268,7 +268,7 @@ python backend/scripts/validate_on_pmdata.py path/to/pmdata --output docs/pmdata
 - No accounts and no personal identifiers are stored; a dataset is a set of daily numbers under a random key.
 - Visitor datasets expire automatically after 90 days without use and can be deleted from the dashboard at any time.
 - The private link is a capability: anyone who has it can read and add to that dataset until it expires. It appears in the browser's address bar and history, so it should be treated like a password. Real accounts are on the roadmap.
-- XML is parsed with `defusedxml`, which refuses entity-expansion attacks; uploads are size-limited.
+- XML is parsed with `defusedxml`, which refuses entity-expansion attacks; uploads are size-limited, and zip archives are limited by decompressed size as well, so a small file cannot expand into a huge one.
 - Secrets (the production database URL) are set in the hosting dashboards. `.env` files are git-ignored and `.env.example` documents the variables.
 - Known gap: there is no rate limiting beyond the cap on the number of uploaded datasets.
 
@@ -281,7 +281,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: the API runs as a Docker
 `pytest` covers:
 
 - **Analytics:** hand-built frames with known answers for load, ACWR, readiness, burnout, correlations and each anomaly rule.
-- **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML.
+- **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML, zip archives including oversized and forged ones.
 - **API:** every endpoint, error shapes, the read-only demo, expiry and capacity limits, on SQLite and PostgreSQL.
 - **PMData reader:** mapping onto the daily schema, gaps and placeholder values.
 - **ML:** no look-ahead in the features, the chronological split, determinism, and refusal on short or flat data.

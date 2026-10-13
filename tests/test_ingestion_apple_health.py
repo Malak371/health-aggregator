@@ -1,8 +1,10 @@
 import datetime as dt
+import io
+import zipfile
 
 import pytest
 
-from app.ingestion.apple_health import parse_apple_health
+from app.ingestion.apple_health import parse_apple_health, parse_apple_health_upload
 from app.ingestion.errors import IngestionError
 from tests.conftest import APPLE_HEALTH_XML
 
@@ -118,3 +120,78 @@ def test_entity_expansion_attacks_are_refused() -> None:
 
     with pytest.raises(IngestionError, match="not valid Apple Health XML"):
         parse_apple_health(bomb)
+
+
+# --- export.zip ----------------------------------------------------------------
+
+MB = 1024 * 1024
+
+
+def zipped(files: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    return buffer.getvalue()
+
+
+def test_export_zip_is_read_like_the_xml_inside_it() -> None:
+    xml = APPLE_HEALTH_XML.read_bytes()
+    archive = zipped(
+        {
+            "apple_health_export/export.xml": xml,
+            "apple_health_export/export_cda.xml": b"<ClinicalDocument/>" * 50_000,
+            "apple_health_export/workout-routes/route_2026-04-01.gpx": b"<gpx/>",
+        }
+    )
+
+    from_zip = parse_apple_health_upload(archive, 300 * MB)
+
+    assert len(archive) < len(xml) / 5  # the point of uploading the zip
+    assert from_zip.records == parse_apple_health(xml).records
+
+
+def test_plain_xml_still_works_through_the_upload_entry_point() -> None:
+    result = parse_apple_health_upload(APPLE_HEALTH_XML.read_bytes(), 300 * MB)
+
+    assert len(result.records) == 150
+
+
+def test_translated_export_file_names_are_found() -> None:
+    content = export(record(STEPS, "2026-01-01 08:00:00", "2026-01-01 09:00:00", "4000"))
+    archive = zipped({"apple_health_export/Exportación.xml": content})
+
+    assert parse_apple_health_upload(archive, MB).records[0].steps == 4000
+
+
+@pytest.mark.parametrize(
+    ("archive", "expected"),
+    [
+        (zipped({"notes.txt": b"hello"}), "does not contain an Apple Health export"),
+        (zipped({"apple_health_export/export_cda.xml": b"<x/>"}), "does not contain"),
+        (zipped({"apple_health_export/export.xml": b"not xml"}), "not valid Apple Health XML"),
+    ],
+)
+def test_unusable_zip_files_are_rejected(archive: bytes, expected: str) -> None:
+    with pytest.raises(IngestionError, match=expected):
+        parse_apple_health_upload(archive, MB)
+
+
+def test_exports_that_unzip_beyond_the_limit_are_refused() -> None:
+    padding = record(STEPS, "2026-01-01 08:00:00", "2026-01-01 09:00:00", "1") * 20_000
+    archive = zipped({"apple_health_export/export.xml": export(padding)})
+
+    with pytest.raises(IngestionError, match="too large once unzipped"):
+        parse_apple_health_upload(archive, MB)
+
+
+def test_a_zip_that_understates_its_size_is_still_stopped() -> None:
+    padding = record(STEPS, "2026-01-01 08:00:00", "2026-01-01 09:00:00", "1") * 20_000
+    archive = bytearray(zipped({"apple_health_export/export.xml": export(padding)}))
+    real_size = len(export(padding)).to_bytes(4, "little")
+    fake_size = (1000).to_bytes(4, "little")
+    assert archive.count(real_size) == 2  # local header and central directory
+    forged = bytes(archive.replace(real_size, fake_size))
+
+    with pytest.raises(IngestionError):
+        parse_apple_health_upload(forged, MB)

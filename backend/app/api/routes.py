@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.analytics.frames import records_to_frame
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.ingestion.apple_health import parse_apple_health
+from app.ingestion.apple_health import parse_apple_health_upload
 from app.ingestion.csv_daily import parse_daily_csv
 from app.ingestion.result import ParseResult
 from app.models import DailyMetric, Dataset
@@ -172,10 +172,17 @@ def import_apple_health(
     dataset: WritableDep,
     session: SessionDep,
     settings: SettingsDep,
-    file: UploadFile = File(description="export.xml from an Apple Health export"),
+    file: UploadFile = File(description="export.zip from the Health app, or its export.xml"),
 ) -> IngestResult:
-    """Import the export.xml file from an Apple Health export, aggregated per day."""
-    return _import_file(file, parse_apple_health, session, dataset, settings)
+    """Import an Apple Health export, aggregated per day.
+
+    Accepts the export.zip the Health app produces or the export.xml inside it.
+    """
+
+    def parse(content: bytes) -> ParseResult:
+        return parse_apple_health_upload(content, settings.max_unzipped_mb * 1024 * 1024)
+
+    return _import_file(file, parse, session, dataset, settings)
 
 
 # --- Metrics and insights ------------------------------------------------------
