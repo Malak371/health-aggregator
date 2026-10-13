@@ -23,7 +23,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table('datasets', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('last_active_at', sa.DateTime(timezone=True), nullable=True))
+        # The server default keeps inserts from the previous release working while a
+        # deploy is rolling out.
+        batch_op.add_column(
+            sa.Column(
+                'last_active_at',
+                sa.DateTime(timezone=True),
+                nullable=True,
+                server_default=sa.func.now(),
+            )
+        )
 
     # Existing datasets count as last active when they were created.
     op.execute('UPDATE datasets SET last_active_at = created_at')

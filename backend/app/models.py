@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -26,7 +26,9 @@ class Dataset(Base):
     source: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     # Last read or write. Visitor datasets expire after a period of inactivity.
-    last_active_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    last_active_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
 
     metrics: Mapped[list[DailyMetric]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan", order_by="DailyMetric.date"

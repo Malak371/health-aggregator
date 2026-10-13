@@ -78,6 +78,13 @@ class BackendClient:
         slug: str = self._request("POST", "/api/v1/datasets", json={"name": name}).json()["slug"]
         return slug
 
+    def add_records(self, slug: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+        """Add days, or merge values into days that already exist."""
+        result: dict[str, Any] = self._request(
+            "POST", f"/api/v1/datasets/{slug}/records", json={"records": records}
+        ).json()
+        return result
+
     def delete_dataset(self, slug: str) -> None:
         self._request("DELETE", f"/api/v1/datasets/{slug}")
 

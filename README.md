@@ -18,7 +18,8 @@
 ## What it does
 
 - **Unified dashboard** for sleep, steps, resting heart rate, mood, sugar intake, training and study time.
-- **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health `export.xml`. The page address becomes a private link to your upload for a day. A synthetic sample of each is bundled, so the demo works without personal data.
+- **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health `export.xml`. The page address becomes a private link to your data. A synthetic sample of each is bundled, so the demo works without personal data.
+- **Daily check-in**: log mood, sleep, training effort and study hours in the app, on their own or on top of an import. Data is kept for 90 days after you last use it.
 - **Rolling load**: session-RPE training load, 7-day acute and 28-day chronic averages, and the acute:chronic workload ratio (ACWR), plus the same for study hours.
 - **Recovery**: a 0-100 readiness score from sleep, resting heart rate against your own baseline, and mood, with a week-over-week trend.
 - **Burnout-risk score**: a transparent weighted score that shows how many points each strain signal contributes.
@@ -103,7 +104,7 @@ Configuration is read from environment variables; copy `.env.example` to `.env` 
 ## Tests and code quality
 
 ```bash
-pytest              # 103 tests: analytics, parsers, API, ML, migrations, dashboard
+pytest              # analytics, parsers, API, ML, migrations, dashboard
 ruff check .        # lint
 ruff format --check .
 mypy                # type-check the backend
@@ -145,9 +146,8 @@ The demo runs on free hosting tiers, which sleep when idle:
 
 ## Roadmap
 
-- User accounts, so uploads can be kept instead of expiring after a day
+- User accounts, to replace private links
 - More importers (Fitbit and Google Fit exports, Garmin)
-- In-app logging of mood, perceived exertion and study time
 - Validate the readiness model on real, consented data; compare against stronger time-series baselines
 - User-configurable thresholds for alerts and the burnout score
 
