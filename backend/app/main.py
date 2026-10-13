@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -11,11 +12,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.analytics.frames import records_to_frame
 from app.api.errors import register_error_handlers
 from app.api.routes import router
 from app.config import get_settings
 from app.db import SessionLocal
 from app.services import datasets as store
+from app.services.insights import build_prediction
 
 DESCRIPTION = """
 Unifies sleep, activity, nutrition, mood, heart-rate, training and study data and
@@ -32,7 +35,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     with app.state.session_factory() as session:
         store.purge_expired_uploads(session, settings.upload_ttl_hours)
         if settings.seed_demo_data:
-            store.seed_demo(session)
+            demo = records_to_frame(store.seed_demo(session).metrics)
+            # Train the demo model in the background so the first visitor does not
+            # wait for it and startup is not delayed.
+            threading.Thread(target=build_prediction, args=(demo,), daemon=True).start()
     yield
 
 
