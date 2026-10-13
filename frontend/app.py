@@ -42,18 +42,13 @@ def backend_url() -> str:
         return "http://localhost:8000"
 
 
-@st.cache_resource
-def get_client(url: str) -> BackendClient:
-    return BackendClient(url)
-
-
 @st.cache_data(ttl=300, show_spinner=False)
 def load_dataset(url: str, slug: str, version: int) -> dict[str, Any]:
     """Everything the page needs for one dataset, fetched in parallel and cached.
 
     `version` changes after an upload so stale results are dropped.
     """
-    return get_client(url).get_many(
+    return BackendClient(url).get_many(
         {name: f"/datasets/{slug}{path}" for name, path in DATASET_PATHS.items()}
     )
 
@@ -68,7 +63,9 @@ def fmt(value: float | None, pattern: str = "{:.0f}") -> str:
     return "n/a" if value is None else pattern.format(value)
 
 
-client = get_client(backend_url())
+# Built on every run on purpose: a client cached across runs survives a redeploy
+# as an instance of the old class and breaks as soon as new code calls a new method.
+client = BackendClient(backend_url())
 state = st.session_state
 state.setdefault("upload_slug", st.query_params.get(LINK_PARAM))
 
