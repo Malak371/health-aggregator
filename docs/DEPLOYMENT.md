@@ -12,7 +12,7 @@ Alternatives considered: Render's own free PostgreSQL is deleted 30 days after c
 
 ## 1. Database (Neon)
 
-1. Create a project at <https://console.neon.tech>.
+1. Create a project at <https://console.neon.tech> in the **AWS US East 2 (Ohio)** region, which matches the region pinned in `render.yaml`.
 2. Copy the connection string (`postgresql://...?sslmode=require`). This is a secret: do not commit it.
 
 ## 2. API (Render)
