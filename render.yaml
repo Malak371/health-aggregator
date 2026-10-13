@@ -5,6 +5,7 @@ services:
     name: health-aggregator-api
     runtime: docker
     plan: free
+    region: ohio # same region as the Neon database (AWS us-east-2)
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     healthCheckPath: /health
