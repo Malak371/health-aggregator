@@ -116,6 +116,28 @@ def test_an_empty_check_in_is_not_saved(client: TestClient, dashboard: AppTest) 
     assert "data" not in dashboard.query_params
 
 
+def test_dashboard_survives_a_deploy_that_leaves_old_modules_loaded(
+    client: TestClient, dashboard: AppTest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Simulate the hosting platform: helper modules from the previous release are
+    # still imported, and lack functions the new script calls.
+    import api_client
+    import charts
+
+    monkeypatch.delattr(api_client.BackendClient, "add_records")
+    monkeypatch.delattr(api_client.BackendClient, "get_many")
+    monkeypatch.delattr(charts, "time_series")
+
+    dashboard.run()
+    today = dt.date.today()
+    dashboard.number_input(key=f"checkin_sleep_hours_{today}").set_value(8.0)
+    dashboard.button(key="checkin_save").click()
+    dashboard.run()
+
+    assert not dashboard.exception
+    assert any("Saved" in message.value for message in dashboard.success)
+
+
 def test_frontend_client_fetches_several_paths_at_once(
     client: TestClient, dashboard: AppTest
 ) -> None:

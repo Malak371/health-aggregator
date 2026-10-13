@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import os
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,17 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+import api_client
 import charts
-from api_client import ApiError, BackendClient
+
+# Streamlit Community Cloud updates source files in place and keeps the Python
+# process alive. This script is re-read on every run, but modules it imports stay
+# cached in sys.modules, so after a deploy new code here could run against the
+# previous version of a helper module. Reloading them on each run keeps all three
+# files in step; they are small, so the cost is negligible.
+api_client = importlib.reload(api_client)
+charts = importlib.reload(charts)
+ApiError, BackendClient = api_client.ApiError, api_client.BackendClient
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
 DEMO = "demo"
@@ -66,8 +76,7 @@ def fmt(value: float | None, pattern: str = "{:.0f}") -> str:
     return "n/a" if value is None else pattern.format(value)
 
 
-# Built on every run on purpose: a client cached across runs survives a redeploy
-# as an instance of the old class and breaks as soon as new code calls a new method.
+# Built on every run so it is always an instance of the freshly loaded class.
 client = BackendClient(backend_url())
 state = st.session_state
 state.setdefault("upload_slug", st.query_params.get(LINK_PARAM))
