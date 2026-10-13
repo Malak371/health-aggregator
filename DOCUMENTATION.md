@@ -46,13 +46,13 @@ Design decisions:
 
 - **The dashboard has no logic.** It calls the API and draws what comes back. Every number can therefore be tested without a browser, and another client could reuse the API.
 - **Analytics are pure functions of a DataFrame.** `analytics/` and `ml/` know nothing about HTTP or the database, which keeps them easy to test with hand-made frames.
-- **Datasets instead of accounts.** There is no login. The bundled demo data lives in a read-only dataset called `demo`. Each visitor who uploads a file gets their own dataset, addressed by a random 128-bit slug that only their browser session knows. The API never lists datasets, uploaded datasets are deleted after `UPLOAD_TTL_HOURS` (24 by default), and their number is capped.
+- **Datasets instead of accounts.** There is no login. The bundled demo data lives in a read-only dataset called `demo`. Each visitor who uploads a file gets their own dataset, addressed by a random 128-bit slug. The dashboard puts that slug in the page address (`?data=...`), which makes the address a private link: reloading or bookmarking it returns to the same data, and sharing it shares the data. The API never lists datasets, uploaded datasets are deleted after `UPLOAD_TTL_HOURS` (24 by default), and their number is capped.
 - **Models are trained on request.** The model is a logistic regression on at most a few hundred rows and trains in about 0.1 s, so there are no model files to version or deploy and the result always matches the data.
 - **One error shape.** Every 4xx response is `{"detail": {"message": "...", "errors": ["..."]}}`, so clients can show a headline and the specifics.
 
 ### Request flow for an upload
 
-1. The dashboard creates a dataset (`POST /api/v1/datasets`) and keeps the slug in the Streamlit session.
+1. The dashboard creates a dataset (`POST /api/v1/datasets`) and keeps the slug in the page address.
 2. It posts the file to `/import/csv` or `/import/apple-health`. The file is size-limited and parsed.
 3. Every day is validated with Pydantic. A CSV with any invalid row is rejected as a whole with line-numbered messages.
 4. Valid days are merged into the dataset: new dates are inserted, existing dates keep the values the new file does not carry.
@@ -238,6 +238,7 @@ Expanding-window cross-validation over the whole dataset (`backend/scripts/compa
 
 - No accounts and no personal identifiers are stored; a dataset is a set of daily numbers under a random key.
 - Uploads expire automatically and can be deleted from the dashboard at any time.
+- The private link is a capability: anyone who has it can read that dataset until it expires. It appears in the browser's address bar and history, so it should be treated like a password for the day it lasts.
 - XML is parsed with `defusedxml`, which refuses entity-expansion attacks; uploads are size-limited.
 - Secrets (the production database URL) are set in the hosting dashboards. `.env` files are git-ignored and `.env.example` documents the variables.
 - Known gap: there is no rate limiting beyond the cap on the number of uploaded datasets.

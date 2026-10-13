@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import requests
@@ -62,6 +63,16 @@ class BackendClient:
 
     def get(self, path: str) -> Any:
         return self._request("GET", f"/api/v1{path}").json()
+
+    def get_many(self, paths: dict[str, str]) -> dict[str, Any]:
+        """Fetch several API paths at once; returns results under the same keys.
+
+        The requests are independent, so running them side by side makes a page
+        load take as long as the slowest call instead of the sum of all of them.
+        """
+        with ThreadPoolExecutor(max_workers=len(paths)) as pool:
+            futures = {name: pool.submit(self.get, path) for name, path in paths.items()}
+            return {name: future.result() for name, future in futures.items()}
 
     def create_dataset(self, name: str) -> str:
         slug: str = self._request("POST", "/api/v1/datasets", json={"name": name}).json()["slug"]
