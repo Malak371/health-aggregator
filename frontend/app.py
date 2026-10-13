@@ -30,7 +30,7 @@ RETENTION = "90 days after you last open or update it"
 RANGES = {"30 days": 30, "90 days": 90, "All": None}
 UPLOAD_KINDS = {
     "Daily metrics CSV": ("csv", ["csv"]),
-    "Apple Health export.xml": ("apple-health", ["xml"]),
+    "Apple Health export (.zip or .xml)": ("apple-health", ["zip", "xml"]),
 }
 # The uploaded dataset's key is kept in the page address so a reload, or a
 # bookmark, comes back to the same data.
@@ -125,6 +125,11 @@ with st.sidebar:
     st.subheader("Try your own data")
     kind_label = st.selectbox("File type", list(UPLOAD_KINDS))
     kind, extensions = UPLOAD_KINDS[kind_label]
+    if kind == "apple-health":
+        st.caption(
+            "On an iPhone: open Health, tap your profile picture, choose **Export All Health "
+            "Data**, and upload the zip file it creates. No need to unzip it."
+        )
     uploaded = st.file_uploader("File", type=extensions, label_visibility="collapsed")
     if st.button("Import", disabled=uploaded is None, type="primary") and uploaded is not None:
         try:
