@@ -118,7 +118,8 @@ CI runs all of this on every push and pull request, with the test suite executed
 - **Model:** standardised, L2-regularised logistic regression over ten rolling features (recent sleep, heart-rate deviation, mood, training and study load). It is small enough for a few months of daily data and its coefficients can be read directly.
 - **Evaluation:** the most recent 25% of days are held out in time order, never shuffled. On the bundled synthetic data the model scores ROC-AUC 0.79 on 40 held-out days.
 - **Honest comparison:** a baseline that simply assumes "tomorrow will be like today" scores 0.82 on the same days. In expanding-window cross-validation the two are level (0.80 vs 0.78). So the model does **not** clearly beat persistence here; what it adds is an explanation of which signals matter. The dashboard shows both numbers.
-- **Limits:** the demo data is synthetic, the test set is small, and the label is derived from the same signals as the features. Details in [DOCUMENTATION.md](DOCUMENTATION.md#6-machine-learning).
+- **On real people:** run per person on the public [PMData](https://datasets.simula.no/pmdata) dataset (16 people, about five months each), the model predicts the app's computed readiness modestly (mean ROC-AUC 0.64, above chance for 13 of 15 people, ahead of persistence for 9 of 12), but predicts people's own self-reported readiness no better than chance (mean 0.53). Per-person test sets are 16 to 33 days, so these are rough.
+- **Limits:** the demo data is synthetic, test sets are small, and the app's readiness label is derived from the same signals as the features. Details in [DOCUMENTATION.md](DOCUMENTATION.md#6-machine-learning).
 
 ## Project layout
 
@@ -131,7 +132,7 @@ backend/
     ml/           feature engineering and the readiness model
     services/     dataset storage and response assembly
   alembic/        database migrations
-  scripts/        synthetic data generators, model comparison
+  scripts/        synthetic data generators, model comparison, PMData validation
 frontend/         Streamlit dashboard (API client, charts, app)
 data/samples/     synthetic demo CSV and Apple Health sample export
 tests/
@@ -148,8 +149,12 @@ The demo runs on free hosting tiers, which sleep when idle:
 
 - User accounts, to replace private links
 - More importers (Fitbit and Google Fit exports, Garmin)
-- Validate the readiness model on real, consented data; compare against stronger time-series baselines
+- Pool data across people and compare against stronger time-series baselines, since per-person models did not predict self-reported readiness
 - User-configurable thresholds for alerts and the burnout score
+
+## Acknowledgements
+
+The real-data evaluation uses PMData: V. Thambawita et al., "PMData: A Sports Logging Dataset", ACM MMSys 2020, <https://doi.org/10.1145/3339825.3394926>, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The data was converted to this project's daily format for analysis and is not redistributed here.
 
 ## History
 
