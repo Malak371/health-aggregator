@@ -3,7 +3,10 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    # Small hosts give a fraction of one CPU; extra BLAS threads only add contention.
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1
 
 WORKDIR /srv
 

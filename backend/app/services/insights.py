@@ -27,11 +27,13 @@ from app.schemas import (
     RecommendationOut,
     RecoverySummary,
 )
+from app.services.cache import ResultCache, frame_fingerprint
 
 DISCLAIMER = (
     "Insights describe patterns in the data you provided. They are not medical advice "
     "and must not be used to diagnose, treat or prevent any condition."
 )
+prediction_cache: ResultCache[PredictionOut] = ResultCache()
 MODEL_NAME = "Logistic regression (L2, standardised features)"
 RECENT_DAYS = 14
 
@@ -136,6 +138,15 @@ def build_insights(slug: str, frame: pd.DataFrame) -> InsightsOut:
 
 
 def build_prediction(frame: pd.DataFrame) -> PredictionOut:
+    """Train, evaluate and explain the model, reusing the result for unchanged data.
+
+    Training runs a cross-validated grid search, which takes seconds on a small
+    shared CPU, so each distinct dataset state is computed once per process.
+    """
+    return prediction_cache.get_or_compute(frame_fingerprint(frame), lambda: _predict(frame))
+
+
+def _predict(frame: pd.DataFrame) -> PredictionOut:
     try:
         report = train_and_explain(frame)
     except InsufficientDataError as exc:
