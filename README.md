@@ -5,7 +5,7 @@
 
 **One place for your sleep, activity, nutrition, mood, heart-rate, training and study data, with explainable insights about recovery and burnout risk.**
 
-**Live demo:** <https://health-aggregator-ersace3sze3xnhirwwcky3.streamlit.app/> (no sign-up; the first load can take about a minute, see [below](#about-the-hosted-demo)) · **Demo video (original prototype):** [YouTube](https://youtu.be/dTq7Soxa-Gs)
+**Live demo:** <https://health-performance-aggregator.streamlit.app/> (no sign-up; the first load can take about a minute, see [below](#about-the-hosted-demo)) · **API docs:** <https://health-aggregator-api.onrender.com/docs> · **Demo video (original prototype):** [YouTube](https://youtu.be/dTq7Soxa-Gs)
 
 > This is a portfolio project, not a medical device. Nothing it shows is medical advice.
 
