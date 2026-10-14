@@ -14,6 +14,7 @@ from app.analytics.correlations import correlation_insights
 from app.analytics.load import acwr_zone, load_metrics
 from app.analytics.recommendations import Snapshot, generate_recommendations
 from app.analytics.recovery import readiness_score, recovery_trend
+from app.analytics.weekly import weekly_changes
 from app.ml.model import InsufficientDataError, train_and_explain
 from app.schemas import (
     AnomalyOut,
@@ -26,6 +27,7 @@ from app.schemas import (
     PredictionOut,
     RecommendationOut,
     RecoverySummary,
+    WeeklyChangeOut,
 )
 from app.services.cache import ResultCache, frame_fingerprint
 
@@ -102,6 +104,7 @@ def build_insights(slug: str, frame: pd.DataFrame) -> InsightsOut:
         days=int(frame.notna().any(axis=1).sum()),
         first_date=frame.index[0].date(),
         last_date=last_day.date(),
+        weekly=[WeeklyChangeOut.model_validate(w) for w in weekly_changes(frame)],
         correlations=[CorrelationOut.model_validate(c) for c in correlations],
         anomalies=[AnomalyOut.model_validate(a) for a in found],
         load=LoadSummary(

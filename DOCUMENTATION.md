@@ -167,6 +167,10 @@ A 0-100 weighted average of five strain components, each scaled to 0-1 and avera
 
 At least two components must be available. Levels: under 33 low, 33-66 moderate, above 66 high. The weights and cut-offs are judgement calls chosen to be easy to explain; they have not been validated against any burnout instrument.
 
+### Weekly summary (`analytics/weekly.py`)
+
+For readiness, sleep, resting heart rate, mood, training load, study hours and steps: the daily average over the last 7 days against the 7 days before. A signal is included only if both weeks have at least 3 logged days. Each entry says whether higher is better, so the dashboard can colour the change; training load and study hours are marked as neither, because more is not simply good or bad.
+
 ### Correlations (`analytics/correlations.py`)
 
 Pearson correlation for a fixed list of pairs, optionally lagged (for example training load against the next day's resting heart rate). A pair needs at least 14 overlapping days. Each result carries `r`, the p-value, the sample size and a strength label (under 0.2 negligible, 0.4 weak, 0.6 moderate, otherwise strong). The wording is always "tends to go with": correlation does not show causation, and several pairs tested at once will sometimes look related by chance.
