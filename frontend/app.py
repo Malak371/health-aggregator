@@ -31,6 +31,7 @@ RANGES = {"30 days": 30, "90 days": 90, "All": None}
 UPLOAD_KINDS = {
     "Daily metrics CSV": ("csv", ["csv"]),
     "Apple Health export (.zip or .xml)": ("apple-health", ["zip", "xml"]),
+    "Fitbit export (.zip)": ("fitbit", ["zip"]),
 }
 # The uploaded dataset's key is kept in the page address so a reload, or a
 # bookmark, comes back to the same data.
@@ -154,6 +155,12 @@ with st.sidebar:
             "On an iPhone: open Health, tap your profile picture, choose **Export All Health "
             "Data**, and upload the zip file it creates. No need to unzip it."
         )
+    if kind == "fitbit":
+        st.caption(
+            "Request an export of your Fitbit data (from your Fitbit account's data export "
+            "page, or Google Takeout) and upload the zip as it arrives. Steps, sleep and "
+            "resting heart rate are imported."
+        )
     uploaded = st.file_uploader("File", type=extensions, label_visibility="collapsed")
     if st.button("Import", disabled=uploaded is None, type="primary") and uploaded is not None:
         try:
@@ -187,7 +194,11 @@ with st.sidebar:
         f"your page address, and is deleted {RETENTION}."
     )
     st.caption("No file handy? Download a sample and import it:")
-    for filename in ("demo_daily_metrics.csv", "apple_health_export_sample.xml"):
+    for filename in (
+        "demo_daily_metrics.csv",
+        "apple_health_export_sample.xml",
+        "fitbit_export_sample.zip",
+    ):
         sample = SAMPLES / filename
         if sample.exists():
             st.download_button(filename, sample.read_bytes(), file_name=filename)

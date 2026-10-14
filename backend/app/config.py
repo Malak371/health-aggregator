@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8501"
     seed_demo_data: bool = True
     max_upload_mb: int = 20
-    # Largest export.xml accepted inside an uploaded zip, once decompressed.
+    # Most data an uploaded zip (Apple Health or Fitbit) may expand to.
     max_unzipped_mb: int = 200
     # Visitor datasets are deleted after this many days without being opened or changed.
     upload_ttl_days: int = 90

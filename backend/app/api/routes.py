@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.ingestion.apple_health import parse_apple_health_upload
 from app.ingestion.csv_daily import parse_daily_csv
+from app.ingestion.fitbit import parse_fitbit_export
 from app.ingestion.result import ParseResult
 from app.models import DailyMetric, Dataset
 from app.schemas import (
@@ -181,6 +182,26 @@ def import_apple_health(
 
     def parse(content: bytes) -> ParseResult:
         return parse_apple_health_upload(content, settings.max_unzipped_mb * 1024 * 1024)
+
+    return _import_file(file, parse, session, dataset, settings)
+
+
+@router.post(
+    "/datasets/{slug}/import/fitbit",
+    response_model=IngestResult,
+    responses=UPLOAD_ERRORS,
+    tags=["ingestion"],
+)
+def import_fitbit(
+    dataset: WritableDep,
+    session: SessionDep,
+    settings: SettingsDep,
+    file: UploadFile = File(description="Fitbit account export or Google Takeout zip"),
+) -> IngestResult:
+    """Import steps, sleep and resting heart rate from a Fitbit export zip."""
+
+    def parse(content: bytes) -> ParseResult:
+        return parse_fitbit_export(content, settings.max_unzipped_mb * 1024 * 1024)
 
     return _import_file(file, parse, session, dataset, settings)
 

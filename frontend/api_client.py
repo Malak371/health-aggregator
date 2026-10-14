@@ -89,7 +89,7 @@ class BackendClient:
         self._request("DELETE", f"/api/v1/datasets/{slug}")
 
     def import_file(self, slug: str, kind: str, filename: str, content: bytes) -> dict[str, Any]:
-        """`kind` is "csv" or "apple-health"."""
+        """`kind` is "csv", "apple-health" or "fitbit"."""
         result: dict[str, Any] = self._request(
             "POST",
             f"/api/v1/datasets/{slug}/import/{kind}",

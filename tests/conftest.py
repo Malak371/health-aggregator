@@ -14,6 +14,7 @@ from app.main import create_app
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
 DEMO_CSV = SAMPLES / "demo_daily_metrics.csv"
 APPLE_HEALTH_XML = SAMPLES / "apple_health_export_sample.xml"
+FITBIT_ZIP = SAMPLES / "fitbit_export_sample.zip"
 
 
 @pytest.fixture(scope="session")

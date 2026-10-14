@@ -106,6 +106,7 @@ Interactive documentation is served at `/docs`. All dataset routes are under `/a
 | DELETE | `/api/v1/datasets/{slug}` | Delete an uploaded dataset |
 | POST | `/api/v1/datasets/{slug}/import/csv` | Import a daily-metrics CSV |
 | POST | `/api/v1/datasets/{slug}/import/apple-health` | Import an Apple Health `export.zip` or `export.xml` |
+| POST | `/api/v1/datasets/{slug}/import/fitbit` | Import a Fitbit export zip |
 | POST | `/api/v1/datasets/{slug}/records` | Add or update days as JSON |
 | GET | `/api/v1/datasets/{slug}/metrics` | Raw daily records, optional `start` / `end` |
 | GET | `/api/v1/datasets/{slug}/metrics/derived` | Per-day load, ACWR, readiness, burnout risk |
@@ -127,6 +128,16 @@ Interactive documentation is served at `/docs`. All dataset routes are under `/a
 | `training_minutes` | `Workout` elements | Sum of durations |
 
 `data/samples/apple_health_export_sample.xml` is a synthetic file written in this format by `backend/scripts/generate_apple_health_sample.py`. Limitations: uploads are capped at `MAX_UPLOAD_MB` (20 MB by default) and the XML inside a zip at `MAX_UNZIPPED_MB` (200 MB by default), enforced on the bytes actually decompressed. Export XML compresses very well, so the zip limit covers far more history than the same limit did for raw XML, but a multi-year export with many workout routes can still exceed it. Parsing runs at roughly 45 MB of XML per second on a laptop and much slower on the free hosting tier; the parser has been tested against the format as documented and against the synthetic sample, not against a wide range of real devices.
+
+**Fitbit export.** The zip from Fitbit's account export, or the Fitbit part of a Google Takeout. It contains many JSON files named after the kind of data (`steps-2024-01-01.json`, `sleep-...`, `resting_heart_rate-...`). Files are matched by name wherever they sit in the archive, because the folder layout differs between export versions, and reduced to one value per day:
+
+| Daily value | Fitbit files | Rule |
+| --- | --- | --- |
+| `steps` | `steps-*.json` (per-minute counts) | Sum per day; a day with no steps at all is treated as not worn |
+| `sleep_hours` | `sleep-*.json` (one entry per sleep log) | Minutes asleep summed per date of sleep, so naps count |
+| `resting_heart_rate` | `resting_heart_rate-*.json` | Daily value; the 0 written for days without a reading becomes missing |
+
+`data/samples/fitbit_export_sample.zip` is a synthetic export written by `backend/scripts/generate_fitbit_sample.py`. Unlike the Apple Health parser, this one has been checked against real device data: the Fitbit Versa 2 files of a PMData participant, repackaged into the export's monthly files, give the same daily values as reading them directly. Limitations: workouts are not imported, because their fields were not verified against a real export; step timestamps are in UTC, so daily totals can differ slightly from the Fitbit app for people far from that time zone; the archive's folder layout was not verified against a current Google Takeout, which is why matching is by file name only. The zip and unzipped size limits are the same as for Apple Health.
 
 ## 5. Analytics
 
@@ -299,7 +310,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: the API runs as a Docker
 `pytest` covers:
 
 - **Analytics:** hand-built frames with known answers for load, ACWR, readiness, burnout, correlations and each anomaly rule.
-- **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML, zip archives including oversized and forged ones.
+- **Parsers:** valid files, each kind of invalid file, double counting, sleep stages, malicious XML, zip archives including oversized and forged ones, Fitbit exports in both timestamp formats.
 - **API:** every endpoint, error shapes, the read-only demo, expiry and capacity limits, on SQLite and PostgreSQL.
 - **PMData reader:** mapping onto the daily schema, gaps and placeholder values.
 - **ML:** no look-ahead in the features, the chronological split, determinism, and refusal on short or flat data.
