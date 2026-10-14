@@ -249,7 +249,7 @@ second.metric(
     help="Rule-based score from sleep debt, training strain, mood, study load and heart rate.",
 )
 third.metric(
-    "Training load ratio (ACWR)",
+    "Load ratio (ACWR)",
     fmt(load["acwr"], "{:.2f}"),
     delta=load["acwr_zone"],
     delta_color="off",
@@ -398,7 +398,7 @@ with model_tab:
         left, right = st.columns([1, 2])
         with left:
             st.metric(
-                f"Chance of low readiness on {detail['predicts']}",
+                "Chance of low readiness tomorrow",
                 f"{detail['probability_low_readiness']:.0%}",
                 help=(
                     "Low readiness means a score under "
@@ -406,7 +406,10 @@ with model_tab:
                     "dataset's training period."
                 ),
             )
-            st.caption(f"Based on data up to {detail['based_on']}. Model: {prediction['model']}.")
+            st.caption(
+                f"For {detail['predicts']}, based on data up to {detail['based_on']}. "
+                f"Model: {prediction['model']}."
+            )
         with right:
             st.markdown("**What is driving this prediction**")
             contributions = pd.DataFrame(detail["contributions"])
@@ -430,14 +433,15 @@ with model_tab:
         first, second, third, fourth = st.columns(4)
         first.metric("ROC-AUC (model)", f"{evaluation['roc_auc']:.2f}")
         second.metric(
-            "ROC-AUC (tomorrow = today)",
+            "ROC-AUC (baseline)",
             fmt(persistence, "{:.2f}"),
-            help="A baseline that ranks days by today's readiness alone.",
+            help="The 'tomorrow will be like today' baseline: ranks days by today's readiness.",
         )
         third.metric("Accuracy (model)", f"{evaluation['accuracy']:.0%}")
         fourth.metric(
-            "Accuracy (always guess majority)",
+            "Accuracy (majority guess)",
             f"{evaluation['baseline_majority_accuracy']:.0%}",
+            help="What you would score by always predicting the more common outcome.",
         )
         if persistence is not None and evaluation["roc_auc"] <= persistence:
             st.info(
