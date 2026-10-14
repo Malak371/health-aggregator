@@ -118,7 +118,7 @@ CI runs all of this on every push and pull request, with the test suite executed
 - **Model:** standardised, L2-regularised logistic regression over ten rolling features (recent sleep, heart-rate deviation, mood, training and study load). It is small enough for a few months of daily data and its coefficients can be read directly.
 - **Evaluation:** the most recent 25% of days are held out in time order, never shuffled. On the bundled synthetic data the model scores ROC-AUC 0.79 on 40 held-out days.
 - **Honest comparison:** a baseline that simply assumes "tomorrow will be like today" scores 0.82 on the same days. In expanding-window cross-validation the two are level (0.80 vs 0.78). So the model does **not** clearly beat persistence here; what it adds is an explanation of which signals matter. The dashboard shows both numbers.
-- **On real people:** run per person on the public [PMData](https://datasets.simula.no/pmdata) dataset (16 people, about five months each), the model predicts the app's computed readiness modestly (mean ROC-AUC 0.64, above chance for 13 of 15 people, ahead of persistence for 9 of 12), but predicts people's own self-reported readiness no better than chance (mean 0.53). Per-person test sets are 16 to 33 days, so these are rough.
+- **On real people:** run per person on the public [PMData](https://datasets.simula.no/pmdata) dataset (16 people, about five months each), the model predicts the app's computed readiness modestly (mean ROC-AUC 0.64, above chance for 13 of 15 people, ahead of persistence for 9 of 12), but predicts people's own self-reported readiness no better than chance (mean 0.53). Per-person test sets are 16 to 33 days, so these are rough. Training one model across all the other participants gives the same picture: 0.63 for computed readiness, and still below the persistence baseline for self-reported readiness (0.57 at best vs 0.61).
 - **Limits:** the demo data is synthetic, test sets are small, and the app's readiness label is derived from the same signals as the features. Details in [DOCUMENTATION.md](DOCUMENTATION.md#6-machine-learning).
 
 ## Project layout
@@ -149,7 +149,7 @@ The demo runs on free hosting tiers, which sleep when idle:
 
 - User accounts, to replace private links
 - More importers (Fitbit and Google Fit exports, Garmin)
-- Pool data across people and compare against stronger time-series baselines, since per-person models did not predict self-reported readiness
+- Richer inputs for the readiness model (heart-rate variability, sleep stages), since neither per-person nor pooled models could predict self-reported readiness from the current signals
 - User-configurable thresholds for alerts and the burnout score
 
 ## Acknowledgements

@@ -248,10 +248,24 @@ What this shows:
 - **Individual numbers are unreliable.** Each test set is only 16 to 33 days, so a single participant's ROC-AUC can move a lot by chance. Only the pattern across participants means anything, and with 16 people even that is weak evidence. No significance tests were run.
 - Participants that could not be evaluated were skipped by the same guards the API applies (too few days, or too few low-readiness days in the test period), not removed by hand. Nothing was tuned on PMData: the features, model and thresholds are the ones chosen on the synthetic data.
 
+#### Pooling across people
+
+Each person has only about 100 usable days, so a second experiment (`backend/scripts/pooled_model_on_pmdata.py`, full tables in [docs/pmdata-pooled.md](docs/pmdata-pooled.md)) trains one model on all the other participants and tests it on the held-out person. The label stays personal (below that person's own 33rd percentile). Mean ROC-AUC per held-out participant:
+
+| Target | Logistic regression | Same, features scaled per person | Gradient boosting | Persistence |
+| --- | --- | --- | --- | --- |
+| Self-reported readiness (13 participants) | 0.52 | 0.57 | 0.52 | **0.61** |
+| Computed readiness (16 participants) | **0.63** | **0.63** | 0.61 | 0.59 |
+
+- **Pooling does not rescue self-reported readiness.** Ten times more training data, a non-linear model and per-person scaling all stay below simply assuming tomorrow will feel like today. The best variant beats persistence for 4 of 13 people. With these signals, how ready someone says they feel is not predictable a day ahead; that likely needs inputs this project does not have (for example heart-rate variability or what happened during the day).
+- **For computed readiness the result repeats.** A model that has never seen the person still reaches 0.63 and is ahead of persistence for 12 or 13 of 16 people, about the same as a model trained on that person alone. The modest signal found earlier is therefore not an artefact of one evaluation set-up.
+- The per-person scaling uses the held-out person's own feature averages, and the personal cut-off uses all of their days, so this experiment measures how well low days can be ranked, not a forecast that could be deployed as is.
+
 To reproduce, download the participant folders from <https://osf.io/vx4bk> (they are not redistributed in this repository) and run:
 
 ```bash
 python backend/scripts/validate_on_pmdata.py path/to/pmdata --output docs/pmdata-validation.md
+python backend/scripts/pooled_model_on_pmdata.py path/to/pmdata --output docs/pmdata-pooled.md
 ```
 
 ### Limitations
