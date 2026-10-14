@@ -84,8 +84,8 @@ def test_a_check_in_creates_a_private_dataset_and_saves_the_day(
     dashboard.run()
     today = dt.date.today()
 
-    dashboard.number_input(key=f"checkin_sleep_hours_{today}").set_value(7.5)
-    dashboard.number_input(key=f"checkin_study_hours_{today}").set_value(3.0)
+    dashboard.number_input(key=f"checkin_sleep_hours_{today}_0").set_value(7.5)
+    dashboard.number_input(key=f"checkin_study_hours_{today}_0").set_value(3.0)
     dashboard.button(key="checkin_save").click()
     dashboard.run()
 
@@ -104,7 +104,23 @@ def test_a_check_in_creates_a_private_dataset_and_saves_the_day(
     assert any("Saved" in message.value for message in dashboard.success)
     assert dataset_choice(dashboard).value == "My data"
     # The form now shows what was saved.
-    assert dashboard.number_input(key=f"checkin_sleep_hours_{today}").value == 7.5
+    assert dashboard.number_input(key=f"checkin_sleep_hours_{today}_1").value == 7.5
+
+
+def test_deleting_my_data_clears_the_check_in_form(client: TestClient, dashboard: AppTest) -> None:
+    dashboard.run()
+    today = dt.date.today()
+    dashboard.number_input(key=f"checkin_sleep_hours_{today}_0").set_value(7.5)
+    dashboard.button(key="checkin_save").click()
+    dashboard.run()
+
+    next(button for button in dashboard.button if button.label == "Delete my data").click()
+    dashboard.run()
+
+    assert not dashboard.exception
+    assert "data" not in dashboard.query_params
+    assert dashboard.number_input(key=f"checkin_sleep_hours_{today}_2").value is None
+    assert any("Fitbit" in info.value for info in dashboard.info)
 
 
 def test_an_empty_check_in_is_not_saved(client: TestClient, dashboard: AppTest) -> None:
@@ -131,7 +147,7 @@ def test_dashboard_survives_a_deploy_that_leaves_old_modules_loaded(
 
     dashboard.run()
     today = dt.date.today()
-    dashboard.number_input(key=f"checkin_sleep_hours_{today}").set_value(8.0)
+    dashboard.number_input(key=f"checkin_sleep_hours_{today}_0").set_value(8.0)
     dashboard.button(key="checkin_save").click()
     dashboard.run()
 
