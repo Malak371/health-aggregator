@@ -18,7 +18,7 @@
 ## What it does
 
 - **Unified dashboard** for sleep, steps, resting heart rate, mood, sugar intake, training and study time, opening on a "this week vs last week" summary. The layout adapts to phones.
-- **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health export (the `export.zip` straight from the Health app, or its `export.xml`). The page address becomes a private link to your data. A synthetic sample of each is bundled, so the demo works without personal data.
+- **Import your own data** with no sign-up: a daily-metrics CSV, an Apple Health export (the `export.zip` straight from the Health app, or its `export.xml`), or a Fitbit export zip (steps, sleep and resting heart rate). The page address becomes a private link to your data. A synthetic sample of each is bundled, so the demo works without personal data.
 - **Daily check-in**: log mood, sleep, training effort and study hours in the app, on their own or on top of an import. Data is kept for 90 days after you last use it.
 - **Rolling load**: session-RPE training load, 7-day acute and 28-day chronic averages, and the acute:chronic workload ratio (ACWR), plus the same for study hours.
 - **Recovery**: a 0-100 readiness score from sleep, resting heart rate against your own baseline, and mood, with a week-over-week trend.
@@ -40,7 +40,7 @@ flowchart LR
 
     subgraph backend [FastAPI service]
         api[REST API<br/>Pydantic validation]
-        ingest[Ingestion<br/>CSV · Apple Health XML]
+        ingest[Ingestion<br/>CSV · Apple Health · Fitbit]
         analytics[Analytics<br/>load · recovery · burnout<br/>correlations · anomalies]
         ml[ML<br/>next-day readiness model]
         api --> ingest
@@ -127,14 +127,14 @@ CI runs all of this on every push and pull request, with the test suite executed
 backend/
   app/
     api/          REST routes and error handling
-    ingestion/    CSV and Apple Health parsers
+    ingestion/    CSV, Apple Health, Fitbit and PMData parsers
     analytics/    load, recovery, burnout, correlations, anomalies, recommendations
     ml/           feature engineering and the readiness model
     services/     dataset storage and response assembly
   alembic/        database migrations
   scripts/        synthetic data generators, model comparison, PMData validation
 frontend/         Streamlit dashboard (API client, charts, app)
-data/samples/     synthetic demo CSV and Apple Health sample export
+data/samples/     synthetic demo CSV, Apple Health and Fitbit sample exports
 tests/
 ```
 
@@ -148,7 +148,7 @@ The demo runs on free hosting tiers, which sleep when idle:
 ## Roadmap
 
 - User accounts, to replace private links
-- More importers (Fitbit and Google Fit exports, Garmin)
+- Fitbit workouts, and more importers (Garmin, Google Fit)
 - Richer inputs for the readiness model (heart-rate variability, sleep stages), since neither per-person nor pooled models could predict self-reported readiness from the current signals
 - User-configurable thresholds for alerts and the burnout score
 
