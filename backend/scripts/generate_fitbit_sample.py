@@ -1,7 +1,7 @@
 """Write a small synthetic zip in the layout of a Fitbit account export.
 
 It replays the first 150 days of the synthetic demo dataset as monthly
-steps-, sleep- and resting_heart_rate- JSON files, using the field names and
+steps-, sleep-, resting_heart_rate- and exercise- JSON files, using the field names and
 timestamp formats of a real export. No real person's data is involved.
 
 Run from the repository root:
@@ -79,6 +79,34 @@ def build() -> dict[str, list[dict[str, Any]]]:
                     "timeInBed": asleep + awake,
                     "type": "stages",
                     "mainSleep": True,
+                }
+            )
+        if row.training_minutes > 0:
+            started = midnight + dt.timedelta(hours=17, minutes=30)
+            files["exercise-0.json"].append(
+                {
+                    "logId": int(rng.integers(10**10, 10**11)),
+                    "activityName": "Run",
+                    "logType": "tracker",
+                    "startTime": started.strftime(STAMP),
+                    "originalStartTime": started.strftime(STAMP),
+                    "duration": int(row.training_minutes * 60_000) + 90_000,
+                    "activeDuration": int(row.training_minutes * 60_000),
+                    "averageHeartRate": int(rng.integers(120, 165)),
+                }
+            )
+        # The tracker also logs everyday walks by itself; they are not training.
+        if rng.random() < 0.5:
+            started = midnight + dt.timedelta(hours=12, minutes=int(rng.integers(0, 50)))
+            files["exercise-0.json"].append(
+                {
+                    "logId": int(rng.integers(10**10, 10**11)),
+                    "activityName": "Walk",
+                    "logType": "auto_detected",
+                    "startTime": started.strftime(STAMP),
+                    "originalStartTime": started.strftime(STAMP),
+                    "duration": 1_200_000,
+                    "activeDuration": 1_200_000,
                 }
             )
     return files

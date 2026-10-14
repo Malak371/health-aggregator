@@ -7,14 +7,20 @@ names that start with the kind of data:
 - steps-2019-11-01.json                per-minute step counts
 - sleep-2019-11-01.json                one entry per sleep log
 - resting_heart_rate-2019-11-01.json   one entry per day
+- exercise-0.json                      one entry per logged or detected activity
 
 Files are matched by name wherever they sit in the archive, because the folder
 layout has changed between export versions. Each kind is reduced to one value
 per day: steps summed, minutes asleep summed per date of sleep, resting heart
-rate as recorded.
+rate as recorded, and active minutes of workouts summed.
 
-Not imported: workouts (their duration fields were not verified against a real
-export) and anything Fitbit does not record, such as mood or study time. Step
+Fitbit also logs every walk it detects on its own (more than half of all
+entries in real data). Those are everyday movement, already counted in steps,
+so they are not treated as training; other detected activities (runs, rides)
+and everything the wearer started or entered are. Fitbit has no perceived
+exertion, so training load falls back to the default rating.
+
+Not imported: anything Fitbit does not record, such as mood or study time. Step
 timestamps in the export are in UTC, so a day's total can differ slightly from
 what the Fitbit app shows for people far from that time zone.
 """
@@ -38,7 +44,7 @@ from app.schemas import DailyRecord
 Rows = list[dict[str, Any]]
 
 # "steps-2019-11-01.json", "sleep-3.json", or the bare "steps.json" some tools write.
-KINDS = ("steps", "sleep", "resting_heart_rate")
+KINDS = ("steps", "sleep", "resting_heart_rate", "exercise")
 FILE_PATTERN = re.compile(rf"(?:^|/)({'|'.join(KINDS)})(?:-[^/]*)?\.json$", re.IGNORECASE)
 
 
@@ -86,14 +92,30 @@ def daily_resting_heart_rate(rows: Rows) -> pd.Series:
     return series.where(series.between(25, 220))
 
 
+def is_training(row: dict[str, Any]) -> bool:
+    """Whether an exercise entry counts as training (see the module docstring)."""
+    auto_walk = row.get("logType") == "auto_detected" and row.get("activityName") == "Walk"
+    return not auto_walk
+
+
+def daily_training_minutes(rows: Rows) -> pd.Series:
+    sessions = [row for row in rows if is_training(row)]
+    table = pd.DataFrame(sessions, columns=["startTime", "originalStartTime", "activeDuration"])
+    start = table["startTime"].where(table["startTime"].notna(), table["originalStartTime"])
+    minutes = pd.to_numeric(table["activeDuration"], errors="coerce") / 60_000
+    daily = minutes.groupby(_days(start)).sum()
+    return daily.where(daily > 0).clip(upper=1440)
+
+
 READERS = {
     "steps": ("steps", daily_steps),
     "sleep": ("sleep_hours", daily_sleep_hours),
     "resting_heart_rate": ("resting_heart_rate", daily_resting_heart_rate),
+    "exercise": ("training_minutes", daily_training_minutes),
 }
 
 
-DIGITS = {"steps": 0, "sleep_hours": 2, "resting_heart_rate": 1}
+DIGITS = {"steps": 0, "sleep_hours": 2, "resting_heart_rate": 1, "training_minutes": 1}
 
 
 def _members(archive: zipfile.ZipFile) -> Iterable[tuple[str, zipfile.ZipInfo]]:
@@ -147,7 +169,7 @@ def parse_fitbit_export(content: bytes, max_unzipped_bytes: int) -> ParseResult:
     if not columns:
         raise IngestionError(
             "No Fitbit data files were found in the zip.",
-            ["Expected files such as steps-2024-01-01.json, sleep-... or resting_heart_rate-..."],
+            ["Expected files such as steps-2024-01-01.json, sleep-..., exercise-... "],
         )
     frame = pd.DataFrame(columns)
     frame = frame[frame.index.notna()].dropna(how="all").sort_index()
@@ -168,8 +190,8 @@ def parse_fitbit_export(content: bytes, max_unzipped_bytes: int) -> ParseResult:
             rejected += 1
 
     warnings = [
-        "Imported steps, sleep and resting heart rate. Fitbit workouts are not imported yet, "
-        "and Fitbit has no mood or study data; use the daily check-in to add those."
+        "Imported steps, sleep, resting heart rate and workout minutes. Fitbit has no effort "
+        "rating, mood or study data; use the daily check-in to add those."
     ]
     missing = [kind.replace("_", " ") for kind in KINDS if not rows[kind]]
     if missing:

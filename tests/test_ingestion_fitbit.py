@@ -12,6 +12,7 @@ from app.ingestion.fitbit import (
     daily_resting_heart_rate,
     daily_sleep_hours,
     daily_steps,
+    daily_training_minutes,
     parse_fitbit_export,
 )
 from tests.conftest import APPLE_HEALTH_XML, FITBIT_ZIP
@@ -42,6 +43,26 @@ RESTING = [
 ]
 
 
+def session(name: str, log_type: str, start: str, minutes: float) -> dict[str, Any]:
+    return {
+        "activityName": name,
+        "logType": log_type,
+        "startTime": start,
+        "originalStartTime": start,
+        "duration": int(minutes * 60_000) + 60_000,
+        "activeDuration": int(minutes * 60_000),
+    }
+
+
+EXERCISE = [
+    session("Run", "tracker", "01/01/24 07:00:00", 30),
+    session("Weights", "auto_detected", "2024-01-01 18:00:00", 45),
+    session("Walk", "auto_detected", "01/01/24 12:30:00", 25),
+    session("Walk", "tracker", "01/02/24 12:30:00", 20),
+    session("Walk", "auto_detected", "01/03/24 12:30:00", 40),
+]
+
+
 def test_steps_are_summed_per_day_in_either_timestamp_format() -> None:
     american = daily_steps(STEPS)
     iso = daily_steps(
@@ -54,6 +75,14 @@ def test_steps_are_summed_per_day_in_either_timestamp_format() -> None:
     assert american.loc["2024-01-01"] == 2000
     assert american.isna().loc["2024-01-02"]  # no steps at all: tracker not worn
     assert iso.loc["2024-01-01"] == 2000
+
+
+def test_training_minutes_ignore_walks_the_tracker_detected_by_itself() -> None:
+    minutes = daily_training_minutes(EXERCISE)
+
+    assert minutes.loc["2024-01-01"] == 75  # run 30 + weights 45; the walk is skipped
+    assert minutes.loc["2024-01-02"] == 20  # a walk the wearer started counts
+    assert len(minutes) == 2
 
 
 def test_sleep_adds_naps_and_resting_heart_rate_ignores_placeholders() -> None:
@@ -72,6 +101,7 @@ def test_export_files_are_found_by_name_in_any_folder_and_merged() -> None:
             ],
             "MyFitbitData/User/Sleep/sleep-2024-01-01.json": SLEEP,
             "resting_heart_rate-2024-01-01.json": RESTING,
+            "Takeout/Fitbit/Global Export Data/exercise-0.json": EXERCISE,
             "Takeout/Fitbit/Global Export Data/heart_rate-2024-01-01.json": [{"bpm": 70}],
             "Takeout/Fitbit/Global Export Data/sleep_score.csv": "ignored",
         }
@@ -81,11 +111,15 @@ def test_export_files_are_found_by_name_in_any_folder_and_merged() -> None:
 
     assert [record.date for record in result.records] == [
         dt.date(2024, 1, 1),
+        dt.date(2024, 1, 2),  # only a workout was recorded that day
         dt.date(2024, 2, 1),
     ]
     first = result.records[0]
     assert (first.steps, first.sleep_hours, first.resting_heart_rate) == (2000, 7.5, 58.3)
-    assert result.records[1].steps == 500
+    assert first.training_minutes == 75
+    assert first.training_rpe is None
+    assert result.records[1].training_minutes == 20
+    assert result.records[2].steps == 500
     assert len(result.warnings) == 1
 
 
@@ -95,7 +129,7 @@ def test_missing_kinds_and_broken_files_are_reported() -> None:
     result = parse_fitbit_export(archive, MB)
 
     assert result.records[0].steps == 2000
-    assert "No files found for: sleep, resting heart rate." in result.warnings
+    assert "No files found for: sleep, resting heart rate, exercise." in result.warnings
     assert "Skipped 2 file(s)" in result.warnings[2]
 
 
@@ -106,7 +140,9 @@ def test_bundled_sample_export() -> None:
     first = result.records[0]
     assert first.date == dt.date(2026, 4, 1)
     assert first.sleep_hours == 5.9
+    assert first.training_minutes == 33  # the day's run; the detected walk is ignored
     assert first.mood_score is None
+    assert result.warnings == [result.warnings[0]]  # every kind of file is present
 
 
 @pytest.mark.parametrize(
