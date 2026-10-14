@@ -21,9 +21,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
+from app.ingestion.fitbit import daily_resting_heart_rate, daily_sleep_hours, daily_steps
 from app.schemas import METRIC_FIELDS
 
 
@@ -59,28 +61,9 @@ def _training(path: Path) -> pd.DataFrame:
     )
 
 
-def _fitbit_sleep(path: Path) -> pd.Series:
-    nights = pd.DataFrame(json.loads(path.read_text()))
-    hours = nights.groupby(pd.to_datetime(nights["dateOfSleep"]))["minutesAsleep"].sum() / 60
-    return hours.clip(upper=24)
-
-
-def _fitbit_resting_hr(path: Path) -> pd.Series:
-    rows = json.loads(path.read_text())
-    series = pd.Series(
-        {pd.Timestamp(row["dateTime"]).normalize(): row["value"]["value"] for row in rows},
-        dtype="float64",
-    )
-    # The export writes 0 for days without a reading.
-    return series.where(series.between(25, 220))
-
-
-def _fitbit_steps(path: Path) -> pd.Series:
-    minutes = pd.DataFrame(json.loads(path.read_text()))
-    counts = pd.to_numeric(minutes["value"], errors="coerce")
-    daily = counts.groupby(pd.to_datetime(minutes["dateTime"]).dt.normalize()).sum()
-    # A day with no steps at all means the watch was not worn.
-    return daily.where(daily > 0).clip(upper=200_000)
+def _rows(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = json.loads(path.read_text())
+    return rows
 
 
 def load_participant(folder: Path) -> PMDataParticipant:
@@ -99,13 +82,17 @@ def load_participant(folder: Path) -> PMDataParticipant:
     fitbit = folder / "fitbit"
     reported_sleep = wellness["sleep_duration_h"].where(lambda h: h.between(0, 24))
     if (fitbit / "sleep.json").exists():
-        columns["sleep_hours"] = _fitbit_sleep(fitbit / "sleep.json").combine_first(reported_sleep)
+        columns["sleep_hours"] = daily_sleep_hours(_rows(fitbit / "sleep.json")).combine_first(
+            reported_sleep
+        )
     else:
         columns["sleep_hours"] = reported_sleep
     if (fitbit / "resting_heart_rate.json").exists():
-        columns["resting_heart_rate"] = _fitbit_resting_hr(fitbit / "resting_heart_rate.json")
+        columns["resting_heart_rate"] = daily_resting_heart_rate(
+            _rows(fitbit / "resting_heart_rate.json")
+        )
     if (fitbit / "steps.json").exists():
-        columns["steps"] = _fitbit_steps(fitbit / "steps.json")
+        columns["steps"] = daily_steps(_rows(fitbit / "steps.json"))
 
     frame = pd.DataFrame(columns).reindex(columns=list(METRIC_FIELDS)).astype("float64")
     frame = frame.dropna(how="all").sort_index()
