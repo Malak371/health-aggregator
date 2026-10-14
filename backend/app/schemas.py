@@ -155,11 +155,27 @@ class RecommendationOut(BaseModel):
     reason: str
 
 
+class WeeklyChangeOut(BaseModel):
+    """A signal's daily average over the last 7 days against the 7 days before."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    label: str
+    unit: str
+    this_week: float
+    last_week: float
+    change: float
+    # null when neither direction is simply good, e.g. training load.
+    higher_is_better: bool | None
+
+
 class InsightsOut(BaseModel):
     dataset: str
     days: int
     first_date: dt.date
     last_date: dt.date
+    weekly: list[WeeklyChangeOut]
     correlations: list[CorrelationOut]
     anomalies: list[AnomalyOut]
     load: LoadSummary
