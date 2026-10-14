@@ -9,11 +9,13 @@
 
 > This is a portfolio project, not a medical device. Nothing it shows is medical advice.
 
-![Dashboard overview](docs/screenshots/overview.jpg)
+![Dashboard overview with the weekly summary](docs/screenshots/overview.png)
 
-| Load and recovery | Explainable prediction |
+| Daily check-in | Load and recovery |
 | --- | --- |
-| ![Load and recovery tab](docs/screenshots/load-recovery.jpg) | ![Prediction tab](docs/screenshots/prediction.jpg) |
+| ![Daily check-in form](docs/screenshots/check-in.png) | ![Load and recovery tab](docs/screenshots/load-recovery.png) |
+
+![Prediction tab showing what drives the forecast](docs/screenshots/prediction.png)
 
 ## What it does
 
