@@ -17,7 +17,7 @@
 
 ## What it does
 
-- **Unified dashboard** for sleep, steps, resting heart rate, mood, sugar intake, training and study time.
+- **Unified dashboard** for sleep, steps, resting heart rate, mood, sugar intake, training and study time, opening on a "this week vs last week" summary. The layout adapts to phones.
 - **Import your own data** with no sign-up: a daily-metrics CSV or an Apple Health export (the `export.zip` straight from the Health app, or its `export.xml`). The page address becomes a private link to your data. A synthetic sample of each is bundled, so the demo works without personal data.
 - **Daily check-in**: log mood, sleep, training effort and study hours in the app, on their own or on top of an import. Data is kept for 90 days after you last use it.
 - **Rolling load**: session-RPE training load, 7-day acute and 28-day chronic averages, and the acute:chronic workload ratio (ACWR), plus the same for study hours.

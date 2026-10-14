@@ -45,6 +45,30 @@ ZONE_HELP = "Under 0.8 undertraining · 0.8-1.3 optimal · 1.3-1.5 caution · ov
 
 st.set_page_config(page_title="Health & Performance Aggregator", page_icon="❤️‍🩹", layout="wide")
 
+# On phones Streamlit stacks every column, which turned the eleven headline numbers
+# into a long scroll before the first chart. Keep number tiles two to a row there
+# and shrink the page title.
+st.markdown(
+    """
+    <style>
+    @media (max-width: 640px) {
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"]) {
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"])
+            > div[data-testid="stColumn"] {
+            min-width: calc(50% - 0.5rem) !important;
+            flex: 1 1 calc(50% - 0.5rem) !important;
+        }
+        div[data-testid="stMetricValue"] { font-size: 1.6rem; }
+        h1 { font-size: 1.9rem !important; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def backend_url() -> str:
     if url := os.environ.get("BACKEND_URL"):
@@ -252,6 +276,29 @@ overview, checkin_tab, load_tab, insight_tab, model_tab, about = st.tabs(
 )
 
 with overview:
+    # .get: during a deploy the dashboard can briefly run against the previous API.
+    if weekly := insights.get("weekly", []):
+        st.subheader("This week vs last week")
+        st.caption("Daily averages over the last 7 days, compared with the 7 days before.")
+        for row_start in range(0, len(weekly), 4):
+            for column, item in zip(st.columns(4), weekly[row_start : row_start + 4], strict=False):
+                better = item["higher_is_better"]
+                column.metric(
+                    item["label"],
+                    f"{item['this_week']:,.10g} {item['unit']}".strip(),
+                    delta=f"{item['change']:+,.10g}",
+                    delta_color=(
+                        "off"
+                        if better is None or item["change"] == 0
+                        else "normal"
+                        if better
+                        else "inverse"
+                    ),
+                    delta_arrow="off" if item["change"] == 0 else "auto",
+                    help=f"Last week: {item['last_week']:,.10g} {item['unit']}".strip(),
+                )
+        st.divider()
+
     left, right = st.columns(2)
     with left:
         st.subheader("Sleep")

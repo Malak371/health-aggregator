@@ -42,6 +42,7 @@ def test_dashboard_renders_the_demo_data(dashboard: AppTest) -> None:
     labels = [metric.label for metric in dashboard.metric]
     assert "Burnout risk" in labels
     assert "ROC-AUC (model)" in labels
+    assert {"Sleep", "Resting heart rate", "Training load per day"} <= set(labels)
     assert any("synthetic demo data" in info.value for info in dashboard.info)
     assert any("not medical advice" in caption.value for caption in dashboard.caption)
 
