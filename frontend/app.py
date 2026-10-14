@@ -158,8 +158,8 @@ with st.sidebar:
     if kind == "fitbit":
         st.caption(
             "Request an export of your Fitbit data (from your Fitbit account's data export "
-            "page, or Google Takeout) and upload the zip as it arrives. Steps, sleep and "
-            "resting heart rate are imported."
+            "page, or Google Takeout) and upload the zip as it arrives. Steps, sleep, "
+            "resting heart rate and workouts are imported."
         )
     uploaded = st.file_uploader("File", type=extensions, label_visibility="collapsed")
     if st.button("Import", disabled=uploaded is None, type="primary") and uploaded is not None:
